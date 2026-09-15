@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.2 (2026-09-15)
+
 - Refuse a review or a Voyage plan while the branch is behind its upstream, and state how far behind; `--allow-behind` continues.
 
 - Add a project-local Tool Gap Log for recurring operations that the Toolbox does not provide.
