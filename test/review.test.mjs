@@ -7,6 +7,7 @@ import { afterEach, beforeEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { watchPathspec } from "../scripts/lib/fs.mjs";
 import { verificationStamp } from "../scripts/lib/state.mjs";
+import { gitDiffSince } from "../scripts/lib/git.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const bin = join(packageRoot, "bin/mauro");
@@ -117,4 +118,126 @@ test("map update stamps only what it fingerprints afresh", () => {
   assert.equal(documents["doc-guide"].verified_dirty, true);
   assert.equal(documents["doc-web"].verified_commit, second);
   assert.equal(documents["doc-web"].verified_dirty, false);
+});
+
+function reviewJson(...args) {
+  return JSON.parse(ok("docs", "review", ...args, "--json", "--root", sandbox).stdout);
+}
+
+// A repository whose doc-guide was fingerprinted at a known, clean commit.
+function guidedRepository() {
+  git("init", "--quiet");
+  commitAll("fixture");
+  ok("init", "--root", sandbox);
+  writeFileSync(join(sandbox, "docs/guide.md"), "# Guide\n\nTokens come from packages/auth/src/token.ts.\n");
+  addDocument("doc-guide", { path: "docs/guide.md", watches: ["packages/auth/src"] });
+  const base = commitAll("add guide");
+  ok("map", "update", "--root", sandbox);
+  commitAll("mauro state");
+  return base;
+}
+
+test("docs review lists no document while every watch matches its fingerprint", () => {
+  guidedRepository();
+  assert.deepEqual(reviewJson().documents, []);
+});
+
+test("a changed watch yields a diff packet from the verified commit", () => {
+  const base = guidedRepository();
+  append("packages/auth/src/token.ts", "\n// rotated\n");
+  commitAll("Rotate the token format");
+  const [packet, ...rest] = reviewJson("doc-guide").documents;
+  assert.deepEqual(rest, []);
+  assert.equal(packet.mode, "diff");
+  assert.equal(packet.base.commit, base);
+  assert.equal(packet.base.reachable, true);
+  assert.deepEqual(packet.changed_watches, ["packages/auth/src"]);
+  assert.match(packet.diff, /^\+\/\/ rotated$/m);
+  assert.equal(packet.diff_truncated, false);
+  assert.deepEqual(packet.commits.map((commit) => commit.subject), ["Rotate the token format"]);
+  assert.deepEqual(packet.untracked, []);
+});
+
+test("uncommitted and untracked changes are part of the packet", () => {
+  guidedRepository();
+  append("packages/auth/src/token.ts", "\n// not committed\n");
+  writeFileSync(join(sandbox, "packages/auth/src/refresh.ts"), "export const refresh = true;\n");
+  const [packet] = reviewJson("doc-guide").documents;
+  assert.equal(packet.mode, "diff");
+  assert.match(packet.diff, /^\+\/\/ not committed$/m);
+  assert.deepEqual(packet.commits, []);
+  assert.deepEqual(packet.untracked, ["packages/auth/src/refresh.ts"]);
+});
+
+test("a missing or unreachable verification commit asks for a full review", () => {
+  guidedRepository();
+  append("packages/auth/src/token.ts", "\n// rotated\n");
+  const manifest = readState("manifest.json");
+  manifest.documents["doc-guide"].verified_commit = "0123456789abcdef0123456789abcdef01234567";
+  writeState("manifest.json", manifest);
+  let [packet] = reviewJson("doc-guide").documents;
+  assert.equal(packet.mode, "full");
+  assert.equal(packet.base.reachable, false);
+  assert.match(packet.reason, /is not in the history of HEAD/);
+  assert.equal(packet.diff, null);
+
+  delete manifest.documents["doc-guide"].verified_commit;
+  writeState("manifest.json", manifest);
+  [packet] = reviewJson("doc-guide").documents;
+  assert.equal(packet.mode, "full");
+  assert.match(packet.reason, /No verification commit is recorded/);
+});
+
+test("without Git every packet is a full review", () => {
+  ok("init", "--root", sandbox);
+  writeFileSync(join(sandbox, "docs/guide.md"), "# Guide\n");
+  addDocument("doc-guide", { path: "docs/guide.md", watches: ["packages/auth/src"] });
+  ok("map", "update", "--root", sandbox);
+  append("packages/auth/src/token.ts", "\n// rotated\n");
+  const [packet] = reviewJson("doc-guide").documents;
+  assert.equal(packet.base.commit, null);
+  assert.equal(packet.mode, "full");
+  assert.match(packet.reason, /No verification commit is recorded/);
+});
+
+test("a declared suspect document is reviewed in full, and a historical one never", () => {
+  guidedRepository();
+  addDocument("doc-report", { path: "docs/guide.md", status: "historical", criticality: "historical", watches: ["packages/auth/src"] });
+  const manifest = readState("manifest.json");
+  manifest.documents["doc-guide"].status = "suspect";
+  writeState("manifest.json", manifest);
+
+  assert.deepEqual(reviewJson().documents.map((packet) => packet.id), ["doc-guide"]);
+  const [packet] = reviewJson("doc-guide").documents;
+  assert.equal(packet.mode, "full");
+  assert.match(packet.reason, /declared suspect/);
+
+  append("packages/auth/src/token.ts", "\n// rotated\n");
+  const ids = reviewJson().documents.map((item) => item.id);
+  assert.equal(ids.includes("doc-report"), false);
+  assert.equal(ids.includes("doc-guide"), true);
+});
+
+test("docs review refuses an unknown document", () => {
+  guidedRepository();
+  const result = run("docs", "review", "doc-nope", "--root", sandbox);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Unknown document: doc-nope/);
+});
+
+test("a large diff is cut at the byte limit and says so", () => {
+  const base = guidedRepository();
+  append("packages/auth/src/token.ts", `\n// ${"x".repeat(1000)}\n`);
+  const diff = gitDiffSince(sandbox, base, ["packages/auth/src"], 64);
+  assert.equal(diff.truncated, true);
+  assert.ok(Buffer.byteLength(diff.text) <= 64);
+});
+
+test("the human rendering names each document and how it will be reviewed", () => {
+  guidedRepository();
+  append("packages/auth/src/token.ts", "\n// rotated\n");
+  commitAll("Rotate the token format");
+  const text = ok("docs", "review", "doc-guide", "--root", sandbox).stdout;
+  assert.match(text, /^Documents to review: 1 \(HEAD [0-9a-f]{7}\)$/m);
+  assert.match(text, /^- doc-guide \[informational\] docs\/guide\.md: diff since [0-9a-f]{7}, 1 changed watch, 1 commit$/m);
 });

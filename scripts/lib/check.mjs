@@ -30,6 +30,35 @@ function validateRelativePath(root, path, findings, code) {
   }
 }
 
+// Which watched paths of each document no longer match their fingerprints.
+// The Bearing check reports these, and `mauro docs review` builds its packets
+// from the same answer, so the two can never disagree.
+export function documentDrift(root, state) {
+  const ignoredPolicy = createGitignoredPolicy(root, state.config);
+  const options = fingerprintOptions(state.config, state.map, root, ignoredPolicy);
+  const drift = {};
+  for (const [id, document] of Object.entries(state.manifest.documents || {})) {
+    const entry = { changed: [], unfingerprinted: [], invalid: [] };
+    // A historical document records past state, such as a dated status report
+    // for people. Changed evidence cannot make it wrong, so it is never suspect.
+    const historical = document.status === "historical" || document.criticality === "historical";
+    for (const watched of historical ? [] : document.watches || []) {
+      try {
+        repoPath(root, watched);
+      } catch (error) {
+        entry.invalid.push({ path: watched, message: error.message });
+        continue;
+      }
+      const expected = state.fingerprints.documents?.[id]?.[watched];
+      const actual = fingerprintPath(root, watched, fingerprintExcludes(state.config, state.map, watched, ignoredPolicy), options);
+      if (!expected) entry.unfingerprinted.push(watched);
+      else if (actual !== expected) entry.changed.push(watched);
+    }
+    drift[id] = entry;
+  }
+  return drift;
+}
+
 export function checkRepository(root) {
   const state = loadState(root);
   const findings = [];
@@ -54,6 +83,7 @@ export function checkRepository(root) {
     }
   }
 
+  const drift = documentDrift(root, state);
   for (const [id, document] of Object.entries(state.manifest.documents || {})) {
     if (!validateRelativePath(root, document.path, findings, "document-path")) continue;
     if (!exists(repoPath(root, document.path))) {
@@ -62,19 +92,10 @@ export function checkRepository(root) {
     if (document.status === "suspect" || document.status === "stale") {
       findings.push(finding(driftLevel(document.criticality), `document-${document.status}`, `${id} is declared ${document.status}.`, document.path));
     }
-    // A historical document records past state, such as a dated status report
-    // for people. Changed evidence cannot make it wrong, so it is never suspect.
-    const historical = document.status === "historical" || document.criticality === "historical";
-    for (const watched of historical ? [] : document.watches || []) {
-      if (!validateRelativePath(root, watched, findings, "watch-path")) continue;
-      const expected = state.fingerprints.documents?.[id]?.[watched];
-      const actual = fingerprintPath(root, watched, fingerprintExclusionPatterns(watched), fingerprintOpts);
-      if (!expected) {
-        findings.push(finding("warning", "fingerprint-missing", `${id} has no fingerprint for ${watched}.`, document.path));
-      } else if (actual !== expected) {
-        findings.push(finding(driftLevel(document.criticality), "document-suspect", `${id} is suspect because ${watched} changed.`, document.path));
-      }
-    }
+    const entry = drift[id];
+    for (const invalid of entry.invalid) findings.push(finding("error", "watch-path", invalid.message, invalid.path));
+    for (const watched of entry.unfingerprinted) findings.push(finding("warning", "fingerprint-missing", `${id} has no fingerprint for ${watched}.`, document.path));
+    for (const watched of entry.changed) findings.push(finding(driftLevel(document.criticality), "document-suspect", `${id} is suspect because ${watched} changed.`, document.path));
   }
 
   for (const [id, record] of Object.entries(state.manifest.knowledge || {})) {

@@ -8,6 +8,7 @@ import { checkRepository, statusSummary } from "./lib/check.mjs";
 import { impact, knowledge, matchingNavigators, where, who, why } from "./lib/query.mjs";
 import { renderPrContext } from "./lib/render.mjs";
 import { nextSteps, renderNext } from "./lib/next.mjs";
+import { renderReview, reviewPackets } from "./lib/review.mjs";
 import { initialize, isInitialized, loadState, pluginRootFrom, updateMap } from "./lib/state.mjs";
 import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
@@ -100,7 +101,11 @@ function mapCommand(root, action, args, json) {
   throw new Error(`Unknown map action: ${action}`);
 }
 
-function docsCommand(root, action, json) {
+function docsCommand(root, action, args, json) {
+  if (action === "review") {
+    const result = reviewPackets(root, { id: args.join(" ").trim() || null });
+    return output(json ? result : renderReview(result), json);
+  }
   const report = checkRepository(root);
   if (action === "check") {
     printCheck(report, json);
@@ -240,7 +245,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     return output(json ? result : renderNext(result), json);
   }
   if (command === "map") return mapCommand(root, action, args, json);
-  if (command === "docs") return docsCommand(root, action || "status", json);
+  if (command === "docs") return docsCommand(root, action || "status", args, json);
   if (command === "charter") return charterCommand(root, action, args, json);
   if (command === "navigator") return navigatorCommand(root, action, args, json);
   if (command === "where") return output(where(root, requireValue([action, ...args].filter(Boolean), "A concept")), json);
