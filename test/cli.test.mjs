@@ -491,3 +491,83 @@ test("map update keeps a human-approved capability that spans several units", ()
   assert.equal(regenerate.status, 0, regenerate.stderr);
   assert.match(regenerate.stdout, /generated: 2/);
 });
+
+function fillCharter(sandbox, sections = null) {
+  const path = join(sandbox, "docs/mauro/charter.md");
+  let text = readFileSync(path, "utf8");
+  const prompts = {
+    "Product purpose": "A fixture monorepo for Mauro tests.",
+    "Intended capability boundaries": "Identity stays in packages/auth.",
+    "Ownership": "One team owns everything.",
+    "Required architecture rules": "Apps import packages. Packages never import apps.",
+    "Allowed exceptions": "None.",
+    "Security and compliance": "No secrets in the tree.",
+    "Build and deployment constraints": "Node 20 or later.",
+    "Refit priorities": "None approved.",
+    "Excluded paths": "build/"
+  };
+  for (const [name, body] of Object.entries(prompts)) {
+    if (sections && !sections.includes(name)) continue;
+    text = text.replace(new RegExp(`(## ${name}\\n\\n)[^\\n]+`), `$1${body}`);
+  }
+  writeFileSync(path, text);
+}
+
+test("a template Charter is reported and refused where intent is compared", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  const init = run("init", "--root", sandbox);
+  assert.equal(init.status, 0, init.stderr);
+  assert.match(init.stdout, /mauro charter create/);
+
+  const validate = run("charter", "validate", "--root", sandbox);
+  assert.equal(validate.status, 1);
+  assert.match(validate.stdout, /valid: false/);
+  assert.match(validate.stdout, /state: template/);
+
+  const check = run("check", "--root", sandbox);
+  assert.equal(check.status, 0, check.stderr);
+  assert.match(check.stdout, /Bearing check: PASS/);
+  assert.match(check.stdout, /INFORMATION charter-template: .*template prompts/);
+  assert.match(run("status", "--root", sandbox).stdout, /charter: template/);
+  assert.match(run("doctor", "--root", sandbox).stdout, /charter: template/);
+
+  const pr = run("pr", "preview", "--root", sandbox);
+  assert.notEqual(pr.status, 0);
+  assert.match(pr.stderr, /Charter is a template/);
+  const refit = run("refit", "propose", "--root", sandbox);
+  assert.notEqual(refit.status, 0);
+  assert.match(refit.stderr, /Charter is a template/);
+  assert.match(run("run", "fix login", "--root", sandbox).stdout, /charter: template/);
+  assert.match(run("charter", "update", "x", "--root", sandbox).stdout, /mauro charter create/);
+
+  const hook = spawnSync(process.execPath, [bin, "hook", "session-start", "--root", sandbox], { cwd: sandbox, encoding: "utf8" });
+  assert.match(hook.stdout, /The Charter is template; run \/mauro charter create/);
+});
+
+test("a filled Charter validates and unlocks the intent-comparing commands", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  assert.equal(run("init", "--root", sandbox).status, 0);
+
+  fillCharter(sandbox, ["Product purpose"]);
+  const partial = run("charter", "validate", "--root", sandbox);
+  assert.equal(partial.status, 1);
+  assert.match(partial.stdout, /state: partial/);
+  assert.match(partial.stdout, /Required architecture rules/);
+  assert.match(run("check", "--root", sandbox).stdout, /INFORMATION charter-partial: .*Intended capability boundaries/);
+  assert.match(run("charter", "create", "--root", sandbox).stdout, /Sections still holding template prompts/);
+
+  fillCharter(sandbox);
+  const complete = run("charter", "validate", "--root", sandbox);
+  assert.equal(complete.status, 0, complete.stdout);
+  assert.match(complete.stdout, /valid: true/);
+  assert.match(complete.stdout, /state: complete/);
+  const check = run("check", "--root", sandbox);
+  assert.match(check.stdout, /Bearing check: PASS/);
+  assert.doesNotMatch(check.stdout, /charter-/);
+  assert.match(run("status", "--root", sandbox).stdout, /charter: complete/);
+  assert.equal(run("pr", "preview", "--root", sandbox).status, 0);
+  assert.equal(run("refit", "propose", "--root", sandbox).status, 0);
+  assert.match(run("charter", "create", "--root", sandbox).stdout, /Charter is complete/);
+  const hook = spawnSync(process.execPath, [bin, "hook", "session-start", "--root", sandbox], { cwd: sandbox, encoding: "utf8" });
+  assert.doesNotMatch(hook.stdout, /Charter/);
+});

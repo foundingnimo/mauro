@@ -54,16 +54,31 @@ Restart Claude Code. Run:
 Standalone mode keeps the short command name. Both normal installation modes
 add automatic session and change hooks.
 
-To push a change from this checkout into an existing standalone installation,
-run:
+Run `./install.sh` again to update. It detects the installation, shows the
+installed and checkout versions, and asks before it replaces
+`~/.claude/mauro` and `~/.claude/skills/mauro`. It does not touch
+`settings.json` or the hooks. Without a terminal, pass `--update` or `--yes`
+(PowerShell: `./install.ps1 -Update` or `-Yes`). Restart Claude Code
+afterwards, because the running session keeps the old skill text.
+
+`mauro --version` prints the version, the commit and the checkout an
+installation came from. `mauro doctor` prints the same stamp.
+
+### Releasing
+
+`package.json` is the only place the version is written. Release with npm:
 
 ```bash
-./install.sh --update      # PowerShell: ./install.ps1 -Update
+npm version patch   # or minor, major
 ```
 
-The update replaces `~/.claude/mauro` and `~/.claude/skills/mauro` from the
-checkout. It does not touch `settings.json` or the hooks. Restart Claude Code
-afterwards, because the running session keeps the old skill text.
+`preversion` runs the tests and the plugin validator. `version` runs
+`scripts/sync-version.mjs`, which copies the version into
+`.claude-plugin/plugin.json` and turns the `## Unreleased` section of
+`CHANGELOG.md` into the release section. npm then commits and tags `v<version>`.
+A release with an empty `## Unreleased` section is refused, so record changes
+as you make them. A Bearing check warns about a Map built by another version
+only across a major or minor release.
 
 ### Plugin development
 

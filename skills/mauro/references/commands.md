@@ -54,6 +54,11 @@ Help is read-only and works before initialization.
 `create` and `update` produce a draft and visible diff. Apply only after user
 approval. The Charter is human-owned.
 
+`validate` reports the Charter state: `template`, `partial`, or `complete`. A
+section that still holds its template prompt is not intent. `pr` and `refit`
+refuse to run while the state is `template`. `run` reports the state and the
+plan must say when no Charter constraint was checked.
+
 ## Map
 
 ```text

@@ -18,7 +18,9 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "validate": "node scripts/validate-plugin.mjs"
+    "validate": "node scripts/validate-plugin.mjs",
+    "preversion": "npm test && npm run validate",
+    "version": "node scripts/sync-version.mjs && git add .claude-plugin/plugin.json CHANGELOG.md"
   },
   "engines": {
     "node": ">=20"

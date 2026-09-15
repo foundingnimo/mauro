@@ -44,9 +44,16 @@ test("install.sh --update replaces the runtime and skill and leaves settings alo
     const env = { ...process.env, CLAUDE_CONFIG_DIR: sandbox };
     const first = spawnSync("sh", [join(packageRoot, "install.sh"), "--no-hooks"], { encoding: "utf8", env });
     assert.equal(first.status, 0, first.stderr);
-    const again = spawnSync("sh", [join(packageRoot, "install.sh"), "--no-hooks"], { encoding: "utf8", env });
+    // stdin is a pipe here, so the installer cannot ask. It names both versions and refuses.
+    const again = spawnSync("sh", [join(packageRoot, "install.sh"), "--no-hooks"], { encoding: "utf8", env, input: "" });
     assert.notEqual(again.status, 0);
+    assert.match(again.stdout, /Mauro \S+ \(.+\) is installed in/);
+    assert.match(again.stdout, /This checkout is \S+ \(.+\)/);
     assert.match(again.stdout, /--update/);
+    const stamp = JSON.parse(readFileSync(join(sandbox, "mauro/.install.json"), "utf8"));
+    assert.equal(stamp.version, JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")).version);
+    assert.equal(stamp.source, packageRoot);
+    assert.match(spawnSync(process.execPath, [join(sandbox, "mauro/bin/mauro"), "--version"], { encoding: "utf8" }).stdout, /^mauro \S+ \(.+, installed .+ from .+\)/);
 
     const settingsPath = join(sandbox, "settings.json");
     writeFileSync(settingsPath, `${JSON.stringify({ model: "sonnet" })}\n`);
@@ -65,7 +72,38 @@ test("install.sh --update replaces the runtime and skill and leaves settings alo
 
     const bogus = spawnSync("sh", [join(packageRoot, "install.sh"), "--upgrade"], { encoding: "utf8", env });
     assert.notEqual(bogus.status, 0);
+
+    // --yes answers the prompt without a terminal.
+    writeFileSync(marker, "// stale again\n");
+    const yes = spawnSync("sh", [join(packageRoot, "install.sh"), "--yes"], { encoding: "utf8", env, input: "" });
+    assert.equal(yes.status, 0, yes.stdout + yes.stderr);
+    assert.match(yes.stdout, /Updated Mauro to/);
+    assert.equal(readFileSync(marker, "utf8"), readFileSync(join(packageRoot, "scripts/lib/git.mjs"), "utf8"));
+    assert.deepEqual(JSON.parse(readFileSync(settingsPath, "utf8")), { model: "sonnet" });
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }
+});
+
+test("the version has one source and the release sync keeps the manifest and changelog in step", async () => {
+  const pkg = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(join(packageRoot, ".claude-plugin/plugin.json"), "utf8"));
+  assert.equal(manifest.version, pkg.version, "run node scripts/sync-version.mjs");
+  const { MAURO_VERSION } = await import(join(packageRoot, "scripts/lib/constants.mjs"));
+  assert.equal(MAURO_VERSION, pkg.version);
+  assert.match(readFileSync(join(packageRoot, "CHANGELOG.md"), "utf8"), /^## Unreleased$/m);
+
+  const { syncVersion } = await import(join(packageRoot, "scripts/sync-version.mjs"));
+  const result = syncVersion({
+    version: "0.2.0",
+    manifest: JSON.stringify({ name: "x", version: "0.1.0" }),
+    changelog: "# Changelog\n\n## Unreleased\n\n- A change.\n\n## 0.1.0\n\n- First.\n",
+    date: "2026-09-15"
+  });
+  assert.equal(JSON.parse(result.manifest).version, "0.2.0");
+  assert.equal(result.changelog, "# Changelog\n\n## Unreleased\n\n## 0.2.0 (2026-09-15)\n\n- A change.\n\n## 0.1.0\n\n- First.\n");
+  // A release with nothing recorded is refused, and a re-run is a no-op.
+  assert.throws(() => syncVersion({ version: "0.3.0", manifest: "{}", changelog: "# Changelog\n\n## Unreleased\n\n## 0.2.0\n" }), /is empty/);
+  const again = syncVersion({ version: "0.2.0", manifest: result.manifest, changelog: result.changelog, date: "2026-09-16" });
+  assert.equal(again.changelog, result.changelog);
 });

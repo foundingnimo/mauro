@@ -9,7 +9,7 @@ knowledge from the work.
 2. Resolve relevant capabilities, paths, knowledge, and documents.
 3. Report suspect binding knowledge before implementation.
 4. Select one primary Navigator and all required reviewing Navigators.
-5. Read the Charter sections that apply to the objective.
+5. Read the Charter sections that apply to the objective. When `mauro run` reports a `template` or `partial` Charter, say so in the plan and do not invent a constraint.
 
 ## Plan gate
 

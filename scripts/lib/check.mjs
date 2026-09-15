@@ -2,6 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
 import { MAURO_VERSION, PATHS, SCHEMA_VERSION } from "./constants.mjs";
 import { exists, fingerprintPath, repoPath, walkFiles } from "./fs.mjs";
+import { charterMessage, charterState } from "./charter.mjs";
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
 import { loadState } from "./state.mjs";
 
@@ -38,8 +39,11 @@ export function checkRepository(root) {
   if (state.map.schema_version !== SCHEMA_VERSION) {
     findings.push(finding("error", "map-schema", `Map schema ${state.map.schema_version} is not supported.`));
   }
-  if (state.map.mauro_version !== MAURO_VERSION) {
-    findings.push(finding("warning", "map-version", `Map version ${state.map.mauro_version} differs from tool version ${MAURO_VERSION}.`));
+  // A patch release changes no Map shape, so only a major or minor difference
+  // asks for a Map update. The exact version still shows in `status`.
+  const minor = (version) => String(version || "").split(".").slice(0, 2).join(".");
+  if (minor(state.map.mauro_version) !== minor(MAURO_VERSION)) {
+    findings.push(finding("warning", "map-version", `Map version ${state.map.mauro_version} differs from tool version ${MAURO_VERSION}. Run \`mauro map update\`.`));
   }
   if (state.manifest.schema_version !== SCHEMA_VERSION || state.fingerprints.schema_version !== SCHEMA_VERSION) {
     findings.push(finding("error", "state-schema", "A Mauro state file has an unsupported schema."));
@@ -123,9 +127,15 @@ export function checkRepository(root) {
     }
   }
 
+  // The Charter is intent, not evidence, so its state never makes the Bearing
+  // stale. It is reported as information so nobody mistakes a template for intent.
+  const charter = charterState(root);
+  const charterNote = charterMessage(charter);
+  if (charterNote) findings.push(finding(charter.state === "missing" ? "error" : "information", `charter-${charter.state}`, charterNote, charter.path));
   const errors = findings.filter((item) => item.level === "error").length;
   const warnings = findings.filter((item) => item.level === "warning").length;
-  return { ok: errors === 0, current: errors === 0 && warnings === 0, errors, warnings, findings, state };
+  const information = findings.filter((item) => item.level === "information").length;
+  return { ok: errors === 0, current: errors === 0 && warnings === 0, errors, warnings, information, charter, findings, state };
 }
 
 export function statusSummary(root) {
@@ -149,6 +159,7 @@ export function statusSummary(root) {
       suspect: knowledge.filter((item) => item.status === "suspect").length,
       stale: knowledge.filter((item) => item.status === "stale").length
     },
+    charter: report.charter.state,
     bearing: { ok: report.ok, current: report.current, errors: report.errors, warnings: report.warnings }
   };
 }

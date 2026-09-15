@@ -1,4 +1,10 @@
-export const MAURO_VERSION = "0.1.0";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// package.json is the one place the version is written. `npm version` bumps it
+// and scripts/sync-version.mjs copies it into the plugin manifest.
+export const MAURO_VERSION = JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../package.json"), "utf8")).version;
 export const SCHEMA_VERSION = 1;
 export const MAX_PERIMETER_REGIONS = 500;
 

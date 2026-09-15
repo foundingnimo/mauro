@@ -29,6 +29,7 @@ A Refit is an evidence-based repository restructuring proposal.
 ## Rules
 
 - Do not describe current state as intended state.
+- Do not propose a Refit against a template Charter. `mauro refit` refuses; run `mauro charter create` first.
 - Do not call similar code duplicate behavior without checking differences.
 - Do not move code during proposal generation.
 - Prefer small vertical migrations.

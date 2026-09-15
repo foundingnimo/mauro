@@ -1,7 +1,7 @@
 import { ALIASES, PUBLIC_COMMANDS } from "./constants.mjs";
 
 const DETAILS = {
-  charter: "Create, show, update, diff, or validate the human-owned Charter.",
+  charter: "Create, show, update, diff, or validate the human-owned Charter. `validate` reports template, partial, or complete.",
   check: "Run a read-only Bearing check for stale knowledge and generated context.",
   docs: "Show document state or run document freshness checks.",
   doctor: "Validate the Mauro installation and project state.",

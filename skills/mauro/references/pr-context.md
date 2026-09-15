@@ -43,6 +43,9 @@ Include only:
 
 Maximum 250 words. Use ASD-STE100 Simplified Technical English.
 
+`mauro pr` refuses to run while the Charter is a template, because the block
+reports Charter constraints. Run `mauro charter create` first.
+
 Exclude raw transcripts, routine details, irrelevant history, full task logs,
 secrets, hidden reasoning, and exhaustive file lists.
 

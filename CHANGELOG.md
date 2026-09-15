@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Keep semantic and human-approved capabilities across `map update`.
+- Render entrypoints, invariants, review, verification and rules in Navigator briefs.
+- Report the Charter state as template, partial or complete; refuse `pr` and `refit` on a template.
+- Keep the leading space of the first `git status --porcelain` line.
+- Read the version from `package.json`; `npm version` releases through `scripts/sync-version.mjs`.
+- Warn on a Map version difference only across a major or minor release.
+- Add `mauro --version` and an install stamp read by `doctor`.
+- Let `install.sh` and `install.ps1` detect an installation and offer to update it.
 - Add a safe perimeter census for generated, excluded, and Git-ignored regions.
 - Add configurable ignored-path scanning, recording, and path hiding.
 - Include admitted ignored evidence and `.gitignore` changes in freshness checks.
