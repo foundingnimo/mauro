@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `mauro next` (alias `n`, synonym `suggest`): findings and suggested next steps with commands.
+- Keep survey anomalies and unresolved items across `map update`.
 - Keep semantic and human-approved capabilities across `map update`.
 - Render entrypoints, invariants, review, verification and rules in Navigator briefs.
 - Report the Charter state as template, partial or complete; refuse `pr` and `refit` on a template.

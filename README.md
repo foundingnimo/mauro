@@ -107,6 +107,7 @@ Claude uses the plugin name as the command namespace. The plugin name is
 | `impact` | `i` | Predict affected repository areas |
 | `knowledge` | `k` | Inspect or maintain knowledge |
 | `map` | `m` | Inspect or update the repository Map |
+| `next` | `n` | List findings and suggested next steps |
 | `pr` | `p` | Generate bounded pull-request context |
 | `run` | `r` | Start a development Voyage |
 | `status` | `s` | Show Mauro state |

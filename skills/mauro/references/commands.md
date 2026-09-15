@@ -12,6 +12,7 @@ Use exact command names and aliases. Do not resolve partial names.
 | `impact` | `i` | Find areas affected by a proposed change. |
 | `knowledge` | `k` | Show, search, propose, verify, update, or retire knowledge. |
 | `map` | `m` | Show, find, update, or verify the repository Map. |
+| `next` | `n` | List findings and suggest next steps with commands. `suggest` is a synonym. |
 | `pr` | `p` | Preview, update, or check pull-request context. |
 | `run` | `r` | Start or resume a development Voyage. |
 | `status` | `s` | Show initialization, Map, knowledge, and freshness state. |
@@ -122,6 +123,8 @@ external write.
 ## Other
 
 ```text
+/mauro next
+/mauro suggest
 /mauro status
 /mauro check
 /mauro docs status

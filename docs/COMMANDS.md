@@ -13,6 +13,7 @@ the repository is loaded as a Claude Code plugin.
 | `impact` | `i` | Find likely change impact. |
 | `knowledge` | `k` | Inspect or maintain Logbook records. |
 | `map` | `m` | Inspect or update the Map. |
+| `next` | `n` | List findings and suggest next steps. |
 | `pr` | `p` | Create bounded pull-request context. |
 | `run` | `r` | Start or resume a Voyage. |
 | `status` | `s` | Show Mauro state. |

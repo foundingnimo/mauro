@@ -21,6 +21,7 @@ Parse the first token in `$ARGUMENTS` as a command. Use this exact alias table:
 | `i` | `impact` |
 | `k` | `knowledge` |
 | `m` | `map` |
+| `n` | `next` |
 | `p` | `pr` |
 | `r` | `run` |
 | `s` | `status` |
@@ -67,6 +68,7 @@ Expedition, Map update, or semantic repository survey.
 - `run`: read [references/voyage.md](references/voyage.md).
 - `knowledge`, `why`, or `who`: read
   [references/knowledge.md](references/knowledge.md).
+- `next`: run `mauro next`, show its output, and offer to start the first suggestion.
 - `check`, `docs`, or `map update`: read
   [references/maintenance.md](references/maintenance.md).
 - `pr`: read [references/pr-context.md](references/pr-context.md).

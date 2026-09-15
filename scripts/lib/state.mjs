@@ -182,11 +182,16 @@ export function updateMap(root) {
   const addedUnits = scanned.units.filter((unit) => !oldUnits.has(unit.id));
   const removedUnits = current.map.units.filter((unit) => !newUnits.has(unit.id));
   const capabilities = mergeCapabilities(current.map.capabilities, scanned.capabilities, scanned.units);
+  // A survey or synthesizer gives its findings an id. The scan never does, so
+  // an id marks a finding that a rescan cannot rebuild and must not drop.
+  const semanticFindings = (items) => (items || []).filter((item) => typeof item.id === "string" && item.id);
   const map = {
     ...scanned,
     capabilities,
+    anomalies: [...scanned.anomalies, ...semanticFindings(current.map.anomalies)],
     unresolved: [
       ...scanned.unresolved,
+      ...semanticFindings(current.map.unresolved),
       ...addedUnits.map((unit) => ({ kind: "new-unit-needs-semantic-review", unit: unit.id, evidence: [unit.manifest || unit.root] })),
       ...removedUnits.map((unit) => ({ kind: "removed-unit-needs-semantic-review", unit: unit.id, evidence: [unit.manifest || unit.root] }))
     ]

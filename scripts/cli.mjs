@@ -7,6 +7,7 @@ import { help } from "./lib/help.mjs";
 import { checkRepository, statusSummary } from "./lib/check.mjs";
 import { impact, knowledge, matchingNavigators, where, who, why } from "./lib/query.mjs";
 import { renderPrContext } from "./lib/render.mjs";
+import { nextSteps, renderNext } from "./lib/next.mjs";
 import { initialize, isInitialized, loadState, pluginRootFrom, updateMap } from "./lib/state.mjs";
 import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
@@ -212,6 +213,10 @@ export async function runCli(argv = process.argv.slice(2)) {
     printCheck(report, json);
     if (!report.ok || (report.warnings && report.state.config.mode === "enforce")) process.exitCode = 1;
     return;
+  }
+  if (command === "next") {
+    const result = nextSteps(root);
+    return output(json ? result : renderNext(result), json);
   }
   if (command === "map") return mapCommand(root, action, args, json);
   if (command === "docs") return docsCommand(root, action || "status", json);

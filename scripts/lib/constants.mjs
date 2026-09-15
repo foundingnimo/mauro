@@ -111,14 +111,16 @@ export const ALIASES = Object.freeze({
   i: "impact",
   k: "knowledge",
   m: "map",
+  n: "next",
   p: "pr",
   r: "run",
   s: "status",
-  w: "where"
+  w: "where",
+  suggest: "next"
 });
 
 export const PUBLIC_COMMANDS = Object.freeze([
   "charter", "check", "docs", "doctor", "help", "impact", "init",
-  "knowledge", "map", "navigator", "pr", "refit", "run", "status",
+  "knowledge", "map", "navigator", "next", "pr", "refit", "run", "status",
   "where", "who", "why"
 ]);

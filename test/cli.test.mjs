@@ -461,6 +461,8 @@ test("map update keeps a human-approved capability that spans several units", ()
     },
     map.capabilities.find((item) => item.id === "cap-fixture-root")
   ];
+  map.anomalies.push({ id: "anomaly-auth-copy", kind: "misplaced-shared-code", severity: "minor", detail: "apps/web copies a helper from packages/auth.", paths: ["apps/web/src/auth.ts"], evidence: ["packages/auth/src/index.ts"], confidence: 0.8 });
+  map.unresolved.push({ id: "unresolved-scope-1", kind: "unassigned-scope", paths: ["docs/**"], detail: "No capability owns docs/." });
   writeFileSync(mapPath, `${JSON.stringify(map, null, 2)}\n`);
   const update = run("map", "update", "--root", sandbox);
   assert.equal(update.status, 0, update.stderr);
@@ -468,6 +470,9 @@ test("map update keeps a human-approved capability that spans several units", ()
   // The approved boundary survives and the drafts for the units it covers do not
   // come back. The workspace draft that nothing covers is still there.
   assert.deepEqual(after.capabilities.map((item) => item.id).sort(), ["cap-fixture-root", "cap-identity"]);
+  // Findings with an id came from a survey. A rescan keeps them beside its own.
+  assert.ok(after.anomalies.some((item) => item.id === "anomaly-auth-copy"));
+  assert.ok(after.unresolved.some((item) => item.id === "unresolved-scope-1"));
   const identity = after.capabilities.find((item) => item.id === "cap-identity");
   assert.equal(identity.approved, true);
   assert.equal(identity.provenance, "human-approved");
@@ -570,4 +575,41 @@ test("a filled Charter validates and unlocks the intent-comparing commands", () 
   assert.match(run("charter", "create", "--root", sandbox).stdout, /Charter is complete/);
   const hook = spawnSync(process.execPath, [bin, "hook", "session-start", "--root", sandbox], { cwd: sandbox, encoding: "utf8" });
   assert.doesNotMatch(hook.stdout, /Charter/);
+});
+
+test("next lists findings and suggests commands in priority order", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  const first = run("next", "--root", sandbox);
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /Charter: template/);
+  assert.match(first.stdout, /1\. \[now\] Write the Charter\.\n   mauro charter create/);
+  assert.match(first.stdout, /\[now\] Review 3 preliminary capability boundaries/);
+  assert.match(first.stdout, /Run the first Voyage/);
+  assert.equal(run("suggest", "--root", sandbox).stdout, first.stdout);
+  assert.equal(run("n", "--root", sandbox).stdout, first.stdout);
+
+  fillCharter(sandbox);
+  const mapPath = join(sandbox, ".mauro/map.json");
+  const map = JSON.parse(readFileSync(mapPath, "utf8"));
+  map.capabilities = map.capabilities.map((item) => ({ ...item, approved: true, provenance: "human-approved" }));
+  map.anomalies.push({ id: "anomaly-stale-readme", kind: "stale-document", severity: "major", detail: "README.md names a deleted package.", paths: ["README.md"], evidence: ["packages"], confidence: 0.9 });
+  map.anomalies.push({ id: "anomaly-copy", kind: "misplaced-shared-code", severity: "minor", detail: "apps/web copies a helper.", paths: ["apps/web/src/auth.ts"], evidence: [], confidence: 0.8 });
+  writeFileSync(mapPath, `${JSON.stringify(map, null, 2)}\n`);
+  const manifestPath = join(sandbox, ".mauro/manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  manifest.documents["doc-readme"] = { path: "README.md", status: "stale", criticality: "binding", watches: ["packages"] };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+  const second = run("next", "--root", sandbox);
+  assert.equal(second.status, 0, second.stderr);
+  assert.match(second.stdout, /Bearing: FAIL/);
+  assert.match(second.stdout, /- \[major\] anomaly-stale-readme: README\.md names a deleted package\./);
+  assert.match(second.stdout, /- \[stale, binding\] README\.md/);
+  assert.doesNotMatch(second.stdout, /Write the Charter/);
+  assert.match(second.stdout, /1\. \[now\] doc-readme is declared stale\.\n   mauro run "Update README\.md"/);
+  assert.match(second.stdout, /\[later\] Propose a Refit for 1 structural finding \(misplaced-shared-code\)\.\n   mauro refit propose/);
+  const asJson = JSON.parse(run("next", "--json", "--root", sandbox).stdout);
+  assert.equal(asJson.suggestions[0].priority, "now");
+  assert.equal(asJson.findings.anomalies[0].id, "anomaly-stale-readme");
 });
