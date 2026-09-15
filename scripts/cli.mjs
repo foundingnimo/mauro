@@ -8,7 +8,7 @@ import { checkRepository, statusSummary } from "./lib/check.mjs";
 import { impact, knowledge, matchingNavigators, where, who, why } from "./lib/query.mjs";
 import { renderPrContext } from "./lib/render.mjs";
 import { nextSteps, renderNext } from "./lib/next.mjs";
-import { renderReview, reviewPackets } from "./lib/review.mjs";
+import { confirmDocument, renderReview, reviewPackets } from "./lib/review.mjs";
 import { initialize, isInitialized, loadState, pluginRootFrom, updateMap } from "./lib/state.mjs";
 import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
@@ -105,6 +105,11 @@ function docsCommand(root, action, args, json) {
   if (action === "review") {
     const result = reviewPackets(root, { id: args.join(" ").trim() || null });
     return output(json ? result : renderReview(result), json);
+  }
+  if (action === "confirm") {
+    const evidence = option(args, "--evidence");
+    const id = requireValue(args, "A document id");
+    return output(confirmDocument(root, id, evidence === true ? null : evidence), json);
   }
   const report = checkRepository(root);
   if (action === "check") {

@@ -1,8 +1,11 @@
+import { statSync } from "node:fs";
+import { posix } from "node:path";
 import { PATHS } from "./constants.mjs";
-import { watchPathspec } from "./fs.mjs";
+import { exists, fingerprintPath, repoPath, toPosix, watchPathspec, writeJson } from "./fs.mjs";
 import { documentDrift } from "./check.mjs";
 import { gitCommitReachable, gitDiffSince, gitHead, gitLogSince, gitUntracked } from "./git.mjs";
-import { loadState } from "./state.mjs";
+import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
+import { loadState, verificationContext, verificationStamp } from "./state.mjs";
 
 export const DIFF_LIMIT = 200 * 1024;
 export const COMMIT_LIMIT = 50;
@@ -72,4 +75,38 @@ export function renderReview(result) {
   }
   if (result.documents.length) lines.push("", `Run \`mauro docs review --json\` for the review packets. Record each verdict under ${PATHS.chronicles}/reviews/.`);
   return `${lines.join("\n")}\n`;
+}
+
+// Records a review verdict of `holds`. The evidence file is the audit trail: a
+// flag that clears itself is never looked at again, so no confirmation happens
+// without a recorded review.
+export function confirmDocument(root, id, evidence) {
+  const state = loadState(root);
+  const document = state.manifest.documents?.[id];
+  if (!document) throw new Error(`Unknown document: ${id}`);
+  if (isHistorical(document)) throw new Error(`${id} is historical. A historical document is never reviewed or confirmed.`);
+  if (typeof evidence !== "string" || !evidence) {
+    throw new Error("docs confirm requires --evidence <file>: the Chronicle file that records the review verdict.");
+  }
+  const normalized = posix.normalize(toPosix(evidence));
+  if (!normalized.startsWith(`${PATHS.chronicles}/`)) {
+    throw new Error(`The evidence must be a file under ${PATHS.chronicles}/: ${evidence}`);
+  }
+  const absolute = repoPath(root, normalized);
+  if (!exists(absolute) || !statSync(absolute).isFile()) {
+    throw new Error(`The evidence file does not exist: ${normalized}`);
+  }
+
+  const ignoredPolicy = createGitignoredPolicy(root, state.config);
+  const options = fingerprintOptions(state.config, state.map, root, ignoredPolicy);
+  const refreshed = {};
+  for (const path of document.watches || []) {
+    refreshed[path] = fingerprintPath(root, path, fingerprintExcludes(state.config, state.map, path, ignoredPolicy), options);
+  }
+  const confirmed = { ...document, ...verificationStamp(document.watches || [], verificationContext(root)), verified_evidence: normalized };
+  if (confirmed.status === "suspect" || confirmed.status === "stale") confirmed.status = "current";
+
+  writeJson(repoPath(root, PATHS.fingerprints), { ...state.fingerprints, documents: { ...state.fingerprints.documents, [id]: refreshed } });
+  writeJson(repoPath(root, PATHS.manifest), { ...state.manifest, documents: { ...state.manifest.documents, [id]: confirmed } });
+  return { id, path: document.path, status: confirmed.status, verified_commit: confirmed.verified_commit, verified_evidence: normalized, watches: Object.keys(refreshed).length };
 }

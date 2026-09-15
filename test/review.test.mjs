@@ -241,3 +241,59 @@ test("the human rendering names each document and how it will be reviewed", () =
   assert.match(text, /^Documents to review: 1 \(HEAD [0-9a-f]{7}\)$/m);
   assert.match(text, /^- doc-guide \[informational\] docs\/guide\.md: diff since [0-9a-f]{7}, 1 changed watch, 1 commit$/m);
 });
+
+function chronicle(name = "2026-09-16-doc-guide.md") {
+  const path = `docs/mauro/chronicles/reviews/${name}`;
+  mkdirSync(join(sandbox, "docs/mauro/chronicles/reviews"), { recursive: true });
+  writeFileSync(join(sandbox, path), "# Review of doc-guide\n\nVerdict: holds.\n");
+  return path;
+}
+
+test("docs confirm refuses without evidence of a review", () => {
+  guidedRepository();
+  for (const [args, message] of [
+    [[], /requires --evidence/],
+    [["--evidence", "README.md"], /must be a file under docs\/mauro\/chronicles\//],
+    [["--evidence", "docs/mauro/chronicles/../../../README.md"], /must be a file under docs\/mauro\/chronicles\//],
+    [["--evidence", "docs/mauro/chronicles/reviews/missing.md"], /evidence file does not exist/]
+  ]) {
+    const result = run("docs", "confirm", "doc-guide", ...args, "--root", sandbox);
+    assert.equal(result.status, 1, args.join(" "));
+    assert.match(result.stderr, message);
+  }
+});
+
+test("docs confirm refuses an unknown or historical document", () => {
+  guidedRepository();
+  const evidence = chronicle();
+  addDocument("doc-report", { path: "docs/guide.md", status: "historical", criticality: "historical", watches: [] });
+  let result = run("docs", "confirm", "doc-nope", "--evidence", evidence, "--root", sandbox);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Unknown document: doc-nope/);
+  result = run("docs", "confirm", "doc-report", "--evidence", evidence, "--root", sandbox);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /is historical/);
+});
+
+test("a confirmed document is current again from its new commit", () => {
+  guidedRepository();
+  append("packages/auth/src/token.ts", "\n// rotated\n");
+  const head = commitAll("Rotate the token format");
+  const manifest = readState("manifest.json");
+  manifest.documents["doc-guide"].status = "suspect";
+  writeState("manifest.json", manifest);
+  // Live control: before the confirmation the Bearing check flags the document.
+  assert.match(ok("check", "--root", sandbox).stdout, /doc-guide is suspect because packages\/auth\/src changed/);
+
+  const evidence = chronicle();
+  const confirmed = JSON.parse(ok("docs", "confirm", "doc-guide", "--evidence", evidence, "--json", "--root", sandbox).stdout);
+  assert.equal(confirmed.status, "current");
+  assert.equal(confirmed.verified_commit, head);
+  assert.equal(confirmed.verified_evidence, evidence);
+
+  assert.doesNotMatch(ok("check", "--root", sandbox).stdout, /doc-guide/);
+  assert.deepEqual(reviewJson("doc-guide").documents, []);
+  const document = readState("manifest.json").documents["doc-guide"];
+  assert.equal(document.verified_commit, head);
+  assert.equal(document.verified_evidence, evidence);
+});

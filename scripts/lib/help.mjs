@@ -3,7 +3,7 @@ import { ALIASES, PUBLIC_COMMANDS } from "./constants.mjs";
 const DETAILS = {
   charter: "Create, show, update, diff, or validate the human-owned Charter. `validate` reports template, partial, or complete.",
   check: "Run a read-only Bearing check for stale knowledge and generated context.",
-  docs: "Show document state, run freshness checks, or build review packets for suspect documents.",
+  docs: "Show document state, run freshness checks, build review packets for suspect documents, or confirm a reviewed document.",
   doctor: "Validate the Mauro installation and project state.",
   help: "Show general help or help for one command.",
   impact: "Find likely capabilities and Navigators for a proposed change.",
@@ -25,7 +25,7 @@ const DETAILS = {
 const USAGE = {
   charter: "mauro charter <create|show|update|diff|validate>",
   check: "mauro check [--json]",
-  docs: "mauro docs <status|check|review [id]> [--json]",
+  docs: "mauro docs <status|check|review [id]|confirm <id> --evidence <file>> [--json]",
   doctor: "mauro doctor",
   help: "mauro help [command]",
   impact: "mauro impact <proposed change>",
