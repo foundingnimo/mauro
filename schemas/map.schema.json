@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mauro.local/schemas/map.schema.json",
+  "title": "Mauro repository map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mauro_version",
+    "generated_at",
+    "baseline",
+    "scan_summary",
+    "files",
+    "units",
+    "capabilities",
+    "dependencies",
+    "documents",
+    "duplicate_groups",
+    "anomalies",
+    "unresolved"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "mauro_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "baseline": {
+      "type": "object",
+      "required": ["commit", "dirty"],
+      "properties": {
+        "commit": { "type": ["string", "null"] },
+        "dirty": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "scan_summary": {
+      "type": "object",
+      "required": ["candidate_files", "included_files", "omitted_files", "roles", "included_units", "stub_units", "omitted_units", "omitted_unit_roots"],
+      "properties": {
+        "candidate_files": { "type": "integer", "minimum": 0 },
+        "included_files": { "type": "integer", "minimum": 0 },
+        "omitted_files": { "type": "integer", "minimum": 0 },
+        "roles": { "type": "object" },
+        "included_units": { "type": "integer", "minimum": 0 },
+        "stub_units": { "type": "integer", "minimum": 0 },
+        "omitted_units": { "type": "integer", "minimum": 0 },
+        "omitted_unit_roots": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "files": { "type": "array", "items": { "type": "object" } },
+    "units": { "type": "array", "items": { "$ref": "#/$defs/unit" } },
+    "capabilities": { "type": "array", "items": { "$ref": "#/$defs/capability" } },
+    "dependencies": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+    "documents": { "type": "array", "items": { "type": "object" } },
+    "duplicate_groups": { "type": "array", "items": { "type": "object" } },
+    "anomalies": { "type": "array", "items": { "type": "object" } },
+    "unresolved": { "type": "array", "items": { "type": "object" } }
+  },
+  "$defs": {
+    "unit": {
+      "type": "object",
+      "required": ["id", "name", "root", "kind", "scope"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "root": { "type": "string" },
+        "kind": { "type": "string" },
+        "scope": { "enum": ["included", "stub"] }
+      },
+      "additionalProperties": true
+    },
+    "capability": {
+      "type": "object",
+      "required": ["id", "name", "purpose", "primary_paths", "confidence", "evidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "purpose": { "type": "string" },
+        "primary_paths": { "type": "array", "items": { "type": "string" } },
+        "secondary_paths": { "type": "array", "items": { "type": "string" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "provenance": { "enum": ["deterministic-draft", "semantic", "human-approved"] },
+        "approved": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to", "kind", "evidence"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "kind": { "type": "string" },
+        "evidence": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
+  }
+}

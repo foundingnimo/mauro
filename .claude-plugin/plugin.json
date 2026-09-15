@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "foundingnimo",
+  "displayName": "Mauro",
+  "version": "0.1.0",
+  "description": "Maps repositories, creates specialist Navigators, and preserves verified code rationale between Claude Code sessions.",
+  "author": {
+    "name": "foundingnimo"
+  },
+  "homepage": "https://github.com/foundingnimo/mauro",
+  "repository": "https://github.com/foundingnimo/mauro",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "repository-map",
+    "agent-memory",
+    "architecture",
+    "documentation"
+  ]
+}

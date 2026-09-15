@@ -1,0 +1,26 @@
+{
+  "name": "@foundingnimo/mauro",
+  "version": "0.1.0",
+  "description": "Repository cartography and durable context for Claude Code agents",
+  "type": "module",
+  "license": "MIT",
+  "author": "foundingnimo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/foundingnimo/mauro.git"
+  },
+  "homepage": "https://github.com/foundingnimo/mauro#readme",
+  "bugs": {
+    "url": "https://github.com/foundingnimo/mauro/issues"
+  },
+  "bin": {
+    "mauro": "./bin/mauro"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "validate": "node scripts/validate-plugin.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

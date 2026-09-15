@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "mode": "advise",
+  "scan": {
+    "packages": {
+      "include": {
+        "names": [],
+        "paths": []
+      },
+      "exclude": {
+        "names": [],
+        "paths": []
+      },
+      "excluded_behavior": "stub"
+    },
+    "package_overrides": [],
+    "tests": {
+      "mode": "evidence",
+      "patterns": [
+        "test/**",
+        "tests/**",
+        "**/test/**",
+        "**/tests/**",
+        "**/__tests__/**",
+        "**/*.test.*",
+        "**/*.spec.*"
+      ]
+    },
+    "fixtures": {
+      "mode": "evidence",
+      "patterns": [
+        "fixtures/**",
+        "**/fixtures/**",
+        "**/__fixtures__/**",
+        "**/testdata/**",
+        "**/__snapshots__/**"
+      ]
+    },
+    "generated": {
+      "mode": "exclude",
+      "patterns": [
+        "vendor/**",
+        "**/vendor/**",
+        "dist/**",
+        "**/dist/**",
+        "build/**",
+        "**/build/**",
+        "coverage/**",
+        "**/coverage/**",
+        ".next/**",
+        "**/.next/**",
+        ".cache/**",
+        "**/.cache/**",
+        "*.min.js",
+        "*.map"
+      ]
+    },
+    "documents": {
+      "mode": "full",
+      "include": [],
+      "exclude": []
+    },
+    "paths": {
+      "exclude": []
+    },
+    "languages": {
+      "include": [],
+      "exclude": []
+    },
+    "max_file_size": 10485760,
+    "follow_symlinks": false,
+    "full_expedition_move_threshold": 0.2
+  },
+  "pull_request": {
+    "enabled": true,
+    "max_words": 250,
+    "mode": "body"
+  }
+}

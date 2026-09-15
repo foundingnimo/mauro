@@ -1,0 +1,55 @@
+# Mauro commands
+
+Use `/mauro` after standalone installation. Use `/foundingnimo:mauro` when
+the repository is loaded as a Claude Code plugin.
+
+## Frequent commands
+
+| Command | Alias | Purpose |
+|---|---:|---|
+| `check` | `c` | Run a read-only Bearing check. |
+| `docs` | `d` | Inspect document state. |
+| `help` | `h` | Show command help. |
+| `impact` | `i` | Find likely change impact. |
+| `knowledge` | `k` | Inspect or maintain Logbook records. |
+| `map` | `m` | Inspect or update the Map. |
+| `pr` | `p` | Create bounded pull-request context. |
+| `run` | `r` | Start or resume a Voyage. |
+| `status` | `s` | Show Mauro state. |
+| `where` | `w` | Find code and context for a concept. |
+
+The higher-frequency command gets the first-letter alias. Infrequent commands
+do not reserve letters. This rule leaves letters available for future frequent
+commands.
+
+## Infrequent commands
+
+`charter`, `doctor`, `init`, `navigator`, `refit`, `who`, and `why` have no
+one-letter alias.
+
+## Examples
+
+```text
+/mauro init
+/mauro c
+/mauro m find authentication
+/mauro w "token rotation"
+/mauro who packages/auth/src/token.ts
+/mauro why K-0004
+/mauro i "change the refresh-token format"
+/mauro k search "atomic rotation"
+/mauro p preview
+/mauro charter update "The API package must not import the web app."
+/mauro refit propose
+/mauro h knowledge
+```
+
+Use exact names or listed aliases. Mauro does not infer partial commands.
+Add `--root <path>` to target a repository explicitly. Add `--json` to
+deterministic query, status, and check commands when another tool consumes the
+result.
+
+Mutation commands that need semantic judgment create a proposal. The skill
+shows the proposed diff before it changes a human-owned document. Pull-request
+updates, commits, pushes, deployments, and product-code moves require explicit
+authorization.
