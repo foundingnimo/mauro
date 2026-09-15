@@ -22,18 +22,26 @@ function readJson(path) {
 }
 
 const required = [
+  ".npmignore",
   ".claude-plugin/plugin.json",
   "skills/mauro/SKILL.md",
   "hooks/hooks.json",
   "bin/mauro",
   "scripts/lib/toolbox.mjs",
+  "scripts/lib/tool-gaps.mjs",
   "scripts/install-standalone-hooks.mjs",
   "schemas/map.schema.json",
   "schemas/manifest.schema.json",
   "schemas/fingerprints.schema.json",
+  "schemas/tool-gaps.schema.json",
   "schemas/config.schema.json"
 ];
 for (const path of required) if (!existsSync(join(root, path))) fail(`${path}: missing`);
+
+const npmIgnore = existsSync(join(root, ".npmignore")) ? readFileSync(join(root, ".npmignore"), "utf8") : "";
+for (const path of [".claude/", ".mauro/"]) {
+  if (!npmIgnore.split(/\r?\n/).includes(path)) fail(`.npmignore: ${path} must not enter a public package.`);
+}
 
 const plugin = readJson(".claude-plugin/plugin.json");
 if (plugin && plugin.name !== "foundingnimo") fail("Plugin namespace must be foundingnimo.");
@@ -44,7 +52,7 @@ for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
   if (!Array.isArray(hooks?.hooks?.[event])) fail(`hooks/hooks.json: ${event} is missing.`);
 }
 
-for (const path of ["schemas/map.schema.json", "schemas/manifest.schema.json", "schemas/fingerprints.schema.json", "schemas/config.schema.json"]) {
+for (const path of ["schemas/map.schema.json", "schemas/manifest.schema.json", "schemas/fingerprints.schema.json", "schemas/tool-gaps.schema.json", "schemas/config.schema.json"]) {
   const schema = readJson(path);
   if (schema && schema.$schema !== "https://json-schema.org/draft/2020-12/schema") fail(`${path}: wrong JSON Schema version.`);
 }
@@ -56,6 +64,10 @@ if (defaultConfig) {
   } catch (error) {
     fail(`templates/config.json: ${error.message}`);
   }
+}
+const defaultToolGaps = readJson("templates/tool-gaps.json");
+if (!defaultToolGaps || defaultToolGaps.schema_version !== 1 || defaultToolGaps.next_id !== 1 || !Array.isArray(defaultToolGaps.gaps)) {
+  fail("templates/tool-gaps.json: invalid default Tool Gap Log.");
 }
 
 const skillPath = join(root, "skills/mauro/SKILL.md");

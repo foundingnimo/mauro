@@ -45,6 +45,7 @@ have no one-letter alias.
 /mauro refit propose
 /mauro tool list
 /mauro tool run dependency-graph --unit payments --json
+/mauro tool gap list --status candidate
 /mauro h knowledge
 ```
 
@@ -65,3 +66,23 @@ their runtime, permissions, input schema, and output schema. Discovery works
 before Mauro initializes a repository. `tool run <name>` requires an
 initialized repository. The installed operations are read-only, network-free,
 and bounded; inspect each operation's declared subprocesses before execution.
+
+### Tool Gap Log
+
+```text
+/mauro tool gaps
+/mauro tool gap list [--status observed|candidate|dismissed|resolved]
+/mauro tool gap show TG-0001
+/mauro tool gap record --key <slug> --need <need> --checked <tools|none> \
+  --fallback <system-utility|temporary-script|manual> --summary <summary> \
+  --input <shape> --output <shape> --voyage <id> [--reporter <name>]
+/mauro tool gap export TG-0001
+/mauro tool gap dismiss TG-0001 --reason <reason>
+/mauro tool gap resolve TG-0001 --tool <registered-tool> [--version <version>]
+```
+
+The Log is `.mauro/tool-gaps.json`. One reporter can add one observation per
+Voyage. Three observations across at least two Voyages promote a gap from
+`observed` to `candidate`. Export prints a redacted proposal and does not use
+the network. Resolve accepts only a registered installed tool. A report can
+reopen a resolved gap only after it checks that tool and still needs a fallback.

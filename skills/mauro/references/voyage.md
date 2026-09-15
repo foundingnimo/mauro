@@ -37,6 +37,9 @@ For each task:
 4. Retry once when the verifier supplies a concrete correction.
 5. Stop before dependent work when verification still fails.
 
+If an agent reports a `tool_gap`, validate it and record it with the Voyage ID
+and reporter name as specified in `toolbox.md`. The agent does not write the Log.
+
 Executors must not commit, push, or deploy.
 
 ## Curate context
@@ -64,6 +67,6 @@ only records that pass.
 3. Regenerate affected Claude rules and Navigators.
 4. Run a Bearing check.
 5. Create or update the Voyage Chronicle.
-6. Report code, knowledge, document, and Map changes.
+6. Report code, knowledge, document, Map, and Tool Gap changes.
 
 Commit, push, deployment, and pull-request changes require user authorization.

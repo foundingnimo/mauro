@@ -20,6 +20,12 @@ and permissions. Toolbox tools use the existing Node.js core. They are
 read-only and do not use the network. Each tool declares any subprocess it can
 start; the documentation index declares Git because it runs a Bearing check.
 
+The Tool Gap Log is project-local machine state at `.mauro/tool-gaps.json`.
+Specialist agents only report structured gaps. The calling Mauro process
+validates and records them, so read-only agents do not write repository state.
+Reports from the same agent and Voyage are one observation. Repeated evidence
+promotes a gap to a candidate; it does not install or execute new code.
+
 ### Semantic survey
 
 Read-only mapper agents identify capabilities, boundaries, entrypoints,

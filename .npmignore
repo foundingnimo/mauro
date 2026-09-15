@@ -2,3 +2,5 @@
 coverage/
 test/
 *.tgz
+.claude/
+.mauro/

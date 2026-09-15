@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a project-local Tool Gap Log for recurring operations that the Toolbox does not provide.
+- Deduplicate gap reports by Voyage and reporter, and promote candidates after repeated evidence.
+- Add Tool Gap list, show, record, dismiss, resolve, and redacted export commands.
+- Surface recurring Toolbox candidates through `mauro status` and `mauro next`.
+- Exclude local Claude investigations and Mauro project state from npm packages.
+
 - Record the commit that each document fingerprint describes (`verified_commit`, `verified_at`, `verified_dirty`, `verified_evidence`).
 - Add `mauro docs review`: one review packet per suspect document, with the diff, commits and untracked files since the verification commit.
 - Add `mauro docs confirm <id> --evidence <file>`: record a review that found a document still holds.

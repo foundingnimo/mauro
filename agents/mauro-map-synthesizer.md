@@ -14,6 +14,11 @@ you create a helper script. If no tool fits, prefer a direct read-only system
 utility. Keep an unavoidable script in temporary storage and report the missing
 Toolbox operation.
 
+If you use a fallback, return one `tool_gap` object with `key`, `need`,
+`existing_tools_checked`, `fallback_kind`, `fallback_summary`, `input_shape`,
+and `output_shape`. Do not include script text, command output, secrets, or
+absolute paths. Do not write `.mauro/tool-gaps.json`; the caller records it.
+
 Write only to the caller-provided draft directory. Do not modify product code,
 the approved Charter, or published Mauro artifacts.
 

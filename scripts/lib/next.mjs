@@ -28,6 +28,7 @@ export function nextSteps(root) {
   const anomalies = [...(state.map.anomalies || [])].sort(bySeverity);
   const unresolved = state.map.unresolved || [];
   const structural = anomalies.filter((item) => /duplicate|misplaced|drift|dead-code|copy/.test(item.kind || ""));
+  const toolGapCandidates = state.tool_gaps.gaps.filter((gap) => gap.status === "candidate");
 
   const suggestions = [];
   const suggest = (priority, action, command, reason) => suggestions.push({ priority, action, command, reason });
@@ -64,6 +65,9 @@ export function nextSteps(root) {
   if (unresolved.length) {
     suggest("later", `Decide ${unresolved.length} unresolved ownership item${unresolved.length === 1 ? "" : "s"}.`, "mauro map show", "Unresolved scope has no Navigator.");
   }
+  if (toolGapCandidates.length) {
+    suggest("later", `Review ${toolGapCandidates.length} recurring Tool Gap candidate${toolGapCandidates.length === 1 ? "" : "s"}.`, "mauro tool gap list --status candidate", "Repeated fallbacks show where a registered Toolbox operation can save work.");
+  }
   if (knowledge.length === 0) {
     suggest("later", "Run the first Voyage so the context curator can propose knowledge records.", `mauro run ${quote("<objective>")}`, "`why` and `who` answer from knowledge records, and there are none yet.");
   }
@@ -78,6 +82,7 @@ export function nextSteps(root) {
       unresolved: unresolved.map((item) => ({ id: item.id || null, kind: item.kind, detail: item.detail || null, paths: item.paths || [] })),
       preliminary_capabilities: preliminary.map((item) => item.id),
       stale_documents: stale.map((document) => ({ path: document.path, status: document.status, criticality: document.criticality })),
+      tool_gap_candidates: toolGapCandidates.map((gap) => ({ id: gap.id, key: gap.key, need: gap.need, occurrences: gap.occurrences, voyages: gap.voyages.length })),
       knowledge: { total: knowledge.length, suspect: knowledge.filter((item) => item.status === "suspect").length }
     },
     suggestions
@@ -89,11 +94,12 @@ export function renderNext(result) {
   const bearing = result.bearing.ok ? (result.bearing.current ? "PASS" : "REVIEW") : "FAIL";
   lines.push(`Bearing: ${bearing} (${result.bearing.errors} error(s), ${result.bearing.warnings} warning(s)). Charter: ${result.charter}.`, "");
   lines.push("Findings", "");
-  const { anomalies, unresolved, preliminary_capabilities: preliminary, stale_documents: stale } = result.findings;
-  if (!anomalies.length && !unresolved.length && !preliminary.length && !stale.length) lines.push("- None recorded.");
+  const { anomalies, unresolved, preliminary_capabilities: preliminary, stale_documents: stale, tool_gap_candidates: toolGaps } = result.findings;
+  if (!anomalies.length && !unresolved.length && !preliminary.length && !stale.length && !toolGaps.length) lines.push("- None recorded.");
   for (const item of anomalies) lines.push(`- [${item.severity}] ${item.id ? `${item.id}: ` : ""}${item.detail}${item.paths.length ? ` (${item.paths.slice(0, 3).join(", ")}${item.paths.length > 3 ? ", …" : ""})` : ""}`);
   for (const item of unresolved) lines.push(`- [unresolved] ${item.id ? `${item.id}: ` : ""}${item.detail || item.kind}${item.paths.length ? ` (${item.paths.slice(0, 3).join(", ")})` : ""}`);
   for (const document of stale) lines.push(`- [${document.status}, ${document.criticality}] ${document.path}`);
+  for (const gap of toolGaps) lines.push(`- [tool candidate] ${gap.id}: ${gap.need} (${gap.occurrences} occurrence(s), ${gap.voyages} Voyage(s))`);
   if (preliminary.length) lines.push(`- [preliminary] ${preliminary.length} capability boundar${preliminary.length === 1 ? "y" : "ies"} without human approval: ${preliminary.join(", ")}`);
   lines.push("", "Suggested next steps", "");
   result.suggestions.forEach((item, index) => {

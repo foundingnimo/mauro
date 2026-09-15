@@ -106,11 +106,21 @@ Queries are read-only.
 /mauro tool run dependency-graph --unit payments --json
 /mauro tool run documentation-index --status suspect --json
 /mauro tool run duplicate-analysis --path "packages/**" --json
+/mauro tool gaps
+/mauro tool gap list --status candidate
+/mauro tool gap show TG-0001
+/mauro tool gap export TG-0001
 ```
 
 `list` and `describe` work before initialization. `run` requires an initialized
 repository. Toolbox operations are read-only, bounded, and implemented in the
 Mauro Node.js runtime.
+
+Tool Gap commands maintain `.mauro/tool-gaps.json`. `record` deduplicates one
+reporter within one Voyage. A gap becomes a candidate after three observations
+across at least two Voyages. `export` is read-only and redacted. `dismiss` and
+`resolve` record a human decision. See `toolbox.md` for the complete recording
+contract.
 
 ## Navigator
 

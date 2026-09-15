@@ -17,6 +17,8 @@ documentation, and business capabilities can disagree.
 - A **Bearing check** tests context freshness.
 - A **Refit** proposes repository restructuring.
 - A **Chronicle** stores detailed history that does not belong in active context.
+- The **Toolbox** is Mauro's registry of trusted reusable operations.
+- A **Tool Gap** records a recurring operation that the Toolbox does not provide.
 
 ## Expedition requirements
 
@@ -127,6 +129,20 @@ Run a Bearing check before planning. Resolve the primary Navigator, review
 Navigators, applicable Charter sections, and active records. The plan records
 scope and exact verification. An independent verifier checks implementation.
 The context curator proposes durable knowledge only after code verification.
+
+## Tool Gap requirements
+
+Tool Gap state lives in `.mauro/tool-gaps.json` and must match
+`schemas/tool-gaps.schema.json`. A specialist agent reports a structured gap
+but does not write the Log. The calling Mauro process validates and records it.
+One reporter contributes at most one observation in one Voyage. Three distinct
+observations across at least two Voyages promote a gap to a candidate.
+
+A Tool Gap contains a need, input shape, output shape, checked registered tools,
+and a short fallback description. It must not contain a raw script, command
+output, secret, absolute path, or repository content. Export is local and
+redacted. Mauro does not submit an issue or install code automatically. A human
+can dismiss a gap or resolve it with an installed registered tool.
 
 ## Pull-request context
 

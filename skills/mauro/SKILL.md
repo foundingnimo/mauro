@@ -65,6 +65,8 @@ Expedition, Map update, or semantic repository survey.
 Before writing a helper script, read [references/toolbox.md](references/toolbox.md)
 and use a registered Mauro tool when it covers the operation. Prefer direct
 system utilities next. Create only unavoidable helper scripts in temporary storage.
+When an agent reports a fallback, validate and record its `tool_gap` as the
+Toolbox reference specifies. Never put raw scripts or command output in the Log.
 
 ## Route workflows
 

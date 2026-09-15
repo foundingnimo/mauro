@@ -7,6 +7,7 @@ import { gitChangedPaths, gitHead } from "./git.mjs";
 import { scanRepository } from "./inventory.mjs";
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions, validateConfig } from "./policy.mjs";
 import { navigatorIdentity, renderClaudeAgent, renderClaudeRule, renderMap, renderNavigatorBrief, slug } from "./render.mjs";
+import { loadToolGapLog } from "./tool-gaps.mjs";
 
 export function isInitialized(root) {
   return exists(repoPath(root, PATHS.config)) && exists(repoPath(root, PATHS.map));
@@ -18,7 +19,8 @@ export function loadState(root) {
     config: validateConfig(readJson(repoPath(root, PATHS.config))),
     map: readJson(repoPath(root, PATHS.map)),
     manifest: readJson(repoPath(root, PATHS.manifest)),
-    fingerprints: readJson(repoPath(root, PATHS.fingerprints))
+    fingerprints: readJson(repoPath(root, PATHS.fingerprints)),
+    tool_gaps: loadToolGapLog(root)
   };
 }
 
@@ -156,6 +158,7 @@ export function initialize(root, pluginRoot) {
   }
   copyTextIfMissing(template(pluginRoot, "config.json"), repoPath(root, PATHS.config));
   copyTextIfMissing(template(pluginRoot, "charter.md"), repoPath(root, PATHS.charter));
+  copyTextIfMissing(template(pluginRoot, "tool-gaps.json"), repoPath(root, PATHS.toolGaps));
   writeJson(repoPath(root, PATHS.map), map);
   const manifest = rebuildViews(root, map);
   for (const document of Object.values(manifest.documents)) Object.assign(document, verificationStamp(document.watches, context));

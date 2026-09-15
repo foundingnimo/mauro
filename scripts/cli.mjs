@@ -13,6 +13,7 @@ import { initialize, isInitialized, loadState, pluginRootFrom, updateMap } from 
 import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
 import { describeTool, listTools, runTool } from "./lib/toolbox.mjs";
+import { dismissToolGap, exportToolGap, listToolGaps, recordToolGap, resolveToolGap, showToolGap } from "./lib/tool-gaps.mjs";
 
 function option(args, name) {
   const index = args.indexOf(name);
@@ -20,6 +21,16 @@ function option(args, name) {
   const value = args[index + 1];
   args.splice(index, value && !value.startsWith("--") ? 2 : 1);
   return value || true;
+}
+
+function requiredOption(args, name) {
+  const value = option(args, name);
+  if (!value || value === true) throw new Error(`${name} requires a value.`);
+  return value;
+}
+
+function rejectArguments(args, usage) {
+  if (args.length) throw new Error(`Usage: ${usage}`);
 }
 
 function output(value, json = false) {
@@ -160,7 +171,68 @@ function toolCommand(root, action, args, json) {
     if (!name) throw new Error("Usage: mauro tool run <name> [--option <value>]");
     return output(runTool(root, name, args), json);
   }
+  if (action === "gaps") return toolGapCommand(root, "list", args, json);
+  if (action === "gap") return toolGapCommand(root, args.shift() || "list", args, json);
   throw new Error(`Unknown tool action: ${action}`);
+}
+
+function toolGapCommand(root, action, args, json) {
+  if (action === "list") {
+    const status = option(args, "--status");
+    if (status === true) throw new Error("--status requires a value.");
+    rejectArguments(args, "mauro tool gap list [--status <status>]");
+    return output(listToolGaps(root, status || "all"), json);
+  }
+  if (action === "show") {
+    const id = args.shift();
+    if (!id) throw new Error("Usage: mauro tool gap show <id>");
+    rejectArguments(args, "mauro tool gap show <id>");
+    return output(showToolGap(root, id), json);
+  }
+  if (action === "record") {
+    const input = {
+      key: requiredOption(args, "--key"),
+      need: requiredOption(args, "--need"),
+      existing_tools_checked: requiredOption(args, "--checked").split(",").map((item) => item.trim()).filter((item) => item && item !== "none"),
+      fallback_kind: requiredOption(args, "--fallback"),
+      fallback_summary: requiredOption(args, "--summary"),
+      input_shape: requiredOption(args, "--input"),
+      output_shape: requiredOption(args, "--output"),
+      voyage: requiredOption(args, "--voyage"),
+      reporter: option(args, "--reporter") || "mauro"
+    };
+    if (input.reporter === true) throw new Error("--reporter requires a value.");
+    rejectArguments(args, "mauro tool gap record --key <key> --need <need> --checked <tools|none> --fallback <kind> --summary <summary> --input <shape> --output <shape> --voyage <id> [--reporter <name>]");
+    return output(recordToolGap(root, input, listTools().map((tool) => tool.name)), json);
+  }
+  if (action === "dismiss") {
+    const id = args.shift();
+    if (!id) throw new Error("Usage: mauro tool gap dismiss <id> --reason <reason>");
+    const reason = requiredOption(args, "--reason");
+    rejectArguments(args, "mauro tool gap dismiss <id> --reason <reason>");
+    return output(dismissToolGap(root, id, reason), json);
+  }
+  if (action === "resolve") {
+    const id = args.shift();
+    if (!id) throw new Error("Usage: mauro tool gap resolve <id> --tool <name> [--version <version>]");
+    const name = requiredOption(args, "--tool");
+    const requestedVersion = option(args, "--version");
+    if (requestedVersion === true) throw new Error("--version requires a value.");
+    rejectArguments(args, "mauro tool gap resolve <id> --tool <name> [--version <version>]");
+    const descriptor = describeTool(name);
+    if (requestedVersion && requestedVersion !== descriptor.version) {
+      throw new Error(`${name} is installed at version ${descriptor.version}, not ${requestedVersion}.`);
+    }
+    return output(resolveToolGap(root, id, descriptor.name, descriptor.version), json);
+  }
+  if (action === "export") {
+    const id = args.shift();
+    if (!id) throw new Error("Usage: mauro tool gap export <id>");
+    rejectArguments(args, "mauro tool gap export <id>");
+    const result = exportToolGap(root, id);
+    return output(json ? result : result.body, json);
+  }
+  throw new Error(`Unknown tool gap action: ${action}`);
 }
 
 function prCommand(root, action, args) {
@@ -187,7 +259,7 @@ function installStamp(pluginRoot) {
 }
 
 function doctor(root, pluginRoot, json) {
-  const files = [".claude-plugin/plugin.json", "skills/mauro/SKILL.md", "hooks/hooks.json", "bin/mauro", "scripts/lib/toolbox.mjs"];
+  const files = [".claude-plugin/plugin.json", "skills/mauro/SKILL.md", "hooks/hooks.json", "bin/mauro", "scripts/lib/toolbox.mjs", "scripts/lib/tool-gaps.mjs"];
   const installation = files.map((path) => ({ path, present: exists(resolve(pluginRoot, path)) }));
   const result = { version: MAURO_VERSION, install: installStamp(pluginRoot), tool: installation, project_initialized: isInitialized(root) };
   if (result.project_initialized) {

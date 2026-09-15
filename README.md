@@ -25,6 +25,7 @@ Version 0.1 is a working minimum viable release:
 - Pointer and fingerprint Bearing checks
 - Command help and stable aliases
 - A registered read-only Node.js Toolbox for recurring repository analysis
+- A project-local Tool Gap Log for recurring operations missing from the Toolbox
 - Document review: Mauro re-checks a document whose evidence changed
 - Claude Code agents, hooks, and workflow instructions
 
@@ -138,6 +139,22 @@ start only the subprocesses that it declares; the documentation index declares
 Git because its Bearing check inspects ignore rules. Results are bounded to
 protect the Claude context window.
 
+When an agent must use a system utility, temporary script, or manual fallback,
+the caller can record the missing reusable operation:
+
+```text
+mauro tool gap record --key dependency-cycles --need "Find dependency cycles." \
+  --checked dependency-graph --fallback system-utility \
+  --summary "Analyzed exported edges." --input "Map dependency edges" \
+  --output "Ordered cycles" --voyage V-0012 --reporter mauro-structure-mapper
+mauro tool gap list --status candidate
+mauro tool gap export TG-0001
+```
+
+The Log deduplicates one reporter within one Voyage. Three observations across
+at least two Voyages make a gap a Toolbox candidate. Export creates a redacted
+issue-ready proposal; Mauro does not submit it or use the network.
+
 ## Document review
 
 A fingerprint says that a watched path changed. It does not say whether the
@@ -174,6 +191,7 @@ docs/mauro/map.md           human-readable observed structure
 .mauro/config.json          repository scan and operating policy
 .mauro/manifest.json        knowledge and documentation index
 .mauro/fingerprints.json    freshness evidence
+.mauro/tool-gaps.json       recurring missing Toolbox operations
 docs/mauro/chronicles/reviews/  document review verdicts and evidence
 .claude/rules/mauro/        generated path-scoped knowledge
 .claude/agents/                generated project Navigators
