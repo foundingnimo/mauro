@@ -43,6 +43,8 @@ export function runHook(event, cwd = process.cwd()) {
     const report = checkRepository(root);
     const label = report.current ? "current" : "needs attention";
     const charter = report.charter.state === "complete" ? "" : ` The Charter is ${report.charter.state === "partial" ? "partial" : report.charter.state}; run /mauro charter ${report.charter.state === "partial" ? "update" : "create"}.`;
-    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${charter} Run /mauro check for details.\n`);
+    const suspect = new Set(report.findings.filter((item) => item.code === "document-suspect").map((item) => item.path)).size;
+    const review = suspect ? ` ${suspect} document${suspect === 1 ? " is" : "s are"} suspect; run /mauro docs review.` : "";
+    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${charter}${review} Run /mauro check for details.\n`);
   }
 }

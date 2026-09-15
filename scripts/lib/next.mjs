@@ -18,7 +18,11 @@ export function nextSteps(root) {
   const { state } = report;
   const documents = Object.entries(state.manifest.documents || {}).map(([id, document]) => ({ id, ...document }));
   const stale = documents.filter((document) => document.status === "stale" || document.status === "suspect");
-  const suspectFindings = report.findings.filter((item) => item.code === "document-suspect" || item.code === "knowledge-suspect");
+  const suspectDocuments = [...new Map(report.findings
+    .filter((item) => item.code === "document-suspect")
+    .map((item) => [item.path, documents.find((document) => document.path === item.path)])
+  ).values()].filter(Boolean);
+  const suspectKnowledge = report.findings.filter((item) => item.code === "knowledge-suspect");
   const preliminary = state.map.capabilities.filter((item) => item.approved !== true);
   const knowledge = Object.values(state.manifest.knowledge || {});
   const anomalies = [...(state.map.anomalies || [])].sort(bySeverity);
@@ -36,16 +40,20 @@ export function nextSteps(root) {
   if (preliminary.length) {
     suggest("now", `Review ${preliminary.length} preliminary capability boundar${preliminary.length === 1 ? "y" : "ies"} at the Map gate.`, "mauro map show", "Navigators and rules are only as good as the boundaries they come from.");
   }
-  for (const item of report.findings.filter((finding) => finding.level === "error" && finding.code !== "charter-missing")) {
+  for (const item of report.findings.filter((finding) => finding.level === "error" && finding.code !== "charter-missing" && finding.code !== "document-suspect")) {
     suggest("now", item.message, item.code.startsWith("document-") ? `mauro run ${quote(`Update ${item.path}`)}` : "mauro check", "An error keeps the Bearing check red.");
+  }
+  if (suspectDocuments.length) {
+    const binding = suspectDocuments.some((document) => document.criticality === "binding");
+    suggest(binding ? "now" : "soon", `Review ${suspectDocuments.length} suspect document${suspectDocuments.length === 1 ? "" : "s"}: ${suspectDocuments.map((document) => document.path).join(", ")}.`, "mauro docs review", "Changed evidence does not make a document wrong. A review decides, and confirms the document when it still holds.");
   }
   const staleBinding = stale.filter((document) => document.criticality === "binding");
   const staleOther = stale.filter((document) => document.criticality !== "binding");
   if (staleOther.length) {
     suggest("soon", `Delete or correct ${staleOther.length} stale or suspect non-binding document${staleOther.length === 1 ? "" : "s"}: ${staleOther.map((document) => document.path).join(", ")}.`, `mauro run ${quote("Delete or correct stale documents")}`, "Code wins. Delete a document that only restates code. Correct a document that holds a decision.");
   }
-  if (suspectFindings.length) {
-    suggest("soon", `Verify ${suspectFindings.length} item${suspectFindings.length === 1 ? "" : "s"} whose evidence changed.`, "mauro docs check", "Suspect means the evidence moved, not that the text is wrong.");
+  if (suspectKnowledge.length) {
+    suggest("soon", `Verify ${suspectKnowledge.length} knowledge record${suspectKnowledge.length === 1 ? "" : "s"} whose evidence changed.`, "mauro check", "Suspect means the evidence moved, not that the record is wrong.");
   }
   for (const item of anomalies.filter((anomaly) => anomaly.severity === "major" && !staleBinding.some((document) => (anomaly.paths || []).includes(document.path)))) {
     suggest("soon", item.detail, `mauro run ${quote(item.id || item.kind)}`, `Major finding${item.id ? ` ${item.id}` : ""} from the Map.`);

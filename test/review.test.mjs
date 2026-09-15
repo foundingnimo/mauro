@@ -297,3 +297,21 @@ test("a confirmed document is current again from its new commit", () => {
   assert.equal(document.verified_commit, head);
   assert.equal(document.verified_evidence, evidence);
 });
+
+test("next asks for a review of suspect documents instead of an update", () => {
+  guidedRepository();
+  const manifest = readState("manifest.json");
+  manifest.documents["doc-guide"].criticality = "binding";
+  writeState("manifest.json", manifest);
+  append("packages/auth/src/token.ts", "\n// rotated\n");
+  const text = ok("next", "--root", sandbox).stdout;
+  assert.match(text, /\[now\] Review \d+ suspect documents?: [^\n]*docs\/guide\.md[^\n]*\.\n   mauro docs review\n/);
+  assert.doesNotMatch(text, /mauro run "Update docs\/guide\.md"/);
+});
+
+test("the session-start message points at the document review", () => {
+  guidedRepository();
+  assert.doesNotMatch(ok("hook", "session-start", "--root", sandbox).stdout, /docs review/);
+  append("packages/auth/src/token.ts", "\n// rotated\n");
+  assert.match(ok("hook", "session-start", "--root", sandbox).stdout, /\d+ documents? (is|are) suspect; run \/mauro docs review\./);
+});
