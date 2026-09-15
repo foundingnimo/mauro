@@ -32,10 +32,12 @@ Record user changes and rejected plan options. Wait for approval.
 
 For each task:
 
-1. Ask the primary Navigator to implement or guide the implementation.
+1. Ask the primary Navigator to scope the implementation. The parent Claude
+   Code session implements it because generated Navigators are read-only.
 2. Capture concise decisions, failed attempts, constraints, and rejected
    alternatives in structured output.
-3. Ask an independent verifier to inspect the code and run checks.
+3. Ask the primary Navigator and an independent verifier to inspect the code.
+   The parent session runs the required checks and supplies the observed output.
 4. Retry once when the verifier supplies a concrete correction.
 5. Stop before dependent work when verification still fails.
 

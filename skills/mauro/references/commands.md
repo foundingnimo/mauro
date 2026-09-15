@@ -132,7 +132,10 @@ contract.
 ```
 
 Generated Navigators are views of the approved Map. They are not independent
-knowledge stores.
+knowledge stores. Claude Code sessions that start in the repository discover
+them from `.claude/agents/`. Run `/agents` to list them, or use `who` and
+`impact` to select the relevant Navigator. Restart a session that was already
+open when Mauro generated or changed the files.
 
 ## Pull request
 

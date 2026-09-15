@@ -311,7 +311,9 @@ test("next asks for a review of suspect documents instead of an update", () => {
 
 test("the session-start message points at the document review", () => {
   guidedRepository();
-  assert.doesNotMatch(ok("hook", "session-start", "--root", sandbox).stdout, /docs review/);
+  const current = ok("hook", "session-start", "--root", sandbox).stdout;
+  assert.doesNotMatch(current, /docs review/);
+  assert.match(current, /\d+ project Navigators? (is|are) available; use \/agents or \/mauro who <path>\./);
   append("packages/auth/src/token.ts", "\n// rotated\n");
   assert.match(ok("hook", "session-start", "--root", sandbox).stdout, /\d+ documents? (is|are) suspect; run \/mauro docs review\./);
 });

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a README Quickstart and document the full current autonomous workflow.
+- Make generated Navigator descriptions specific enough for proactive Claude
+  Code delegation from any session in the repository.
+- State when another Claude Code session must restart to load generated or
+  regenerated Navigators, and expose discovery commands at session start.
+- Keep generated Navigators read-only while the parent session implements and
+  verifies product changes.
+
 ## 0.1.2 (2026-09-15)
 
 - Refuse a review or a Voyage plan while the branch is behind its upstream, and state how far behind; `--allow-behind` continues.

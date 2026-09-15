@@ -16,7 +16,7 @@ English. Project identifiers and declared technical nouns are permitted.
 
 ## Status
 
-Version 0.1 is a working minimum viable release:
+The current 0.1 release provides:
 
 - Repository initialization and inventory scan
 - Charter creation and validation
@@ -31,6 +31,52 @@ Version 0.1 is a working minimum viable release:
 
 Semantic capability mapping, context curation, and Refit proposals are
 performed by Claude agents through the Mauro skill.
+
+## Quickstart
+
+1. Install Mauro:
+
+   ```bash
+   git clone https://github.com/foundingnimo/mauro.git
+   cd mauro
+   ./install.sh
+   ```
+
+   PowerShell users can run `./install.ps1`.
+
+2. Restart Claude Code, open the repository that Mauro will map, and run:
+
+   ```text
+   /mauro init
+   ```
+
+   Mauro inventories the permitted repository perimeter, maps its initial
+   capabilities, creates the Charter and durable knowledge structure, and
+   publishes repository-specific Navigators under `.claude/agents/`.
+
+3. Let Mauro order the remaining work:
+
+   ```text
+   /mauro next
+   ```
+
+   Follow the first suggested command. The normal first run reviews flagged
+   scan boundaries, approves the semantic Map, and replaces the Charter
+   prompts with explicit human intent.
+
+4. Start an implementation Voyage:
+
+   ```text
+   /mauro run "Add account recovery"
+   ```
+
+   Mauro selects the responsible Navigators and relevant knowledge, prepares
+   a bounded plan, verifies the implementation, reviews affected documents,
+   and records durable context. It does not commit, push, deploy, or update a
+   pull request without explicit authorization.
+
+Run `/mauro check` at any time to inspect the current Bearing. Use
+`/mauro help` for the full command list.
 
 ## Install
 
@@ -110,7 +156,7 @@ Claude uses the plugin name as the command namespace. The plugin name is
 | `impact` | `i` | Predict affected repository areas |
 | `knowledge` | `k` | Inspect or maintain knowledge |
 | `map` | `m` | Inspect or update the repository Map |
-| `next` | `n` | List findings and suggested next steps |
+| `next` | `n` | List findings and suggested next steps; `suggest` is a synonym |
 | `pr` | `p` | Generate bounded pull-request context |
 | `run` | `r` | Start a development Voyage |
 | `status` | `s` | Show Mauro state |
@@ -204,6 +250,43 @@ docs/mauro/chronicles/reviews/  document review verdicts and evidence
 
 The changed-path queue in `.mauro/changed-paths.json` is machine state. A
 team can commit it or ignore it according to its workflow.
+
+## Use Navigators from other Claude sessions
+
+Mauro writes repository specialists as Claude Code project agents in
+`.claude/agents/`. Claude Code discovers these agents by walking up from the
+session working directory. A second Claude session that starts in the same
+repository, or in one of its subdirectories, can therefore use the same
+Navigators without running a second Mauro mapping process.
+
+In that session:
+
+- Run `/agents` to see every available project Navigator.
+- Run `/mauro who <path>` to find the Navigator responsible for a file.
+- Run `/mauro impact "<ticket or change>"` to find all likely Navigators.
+- Name a Navigator explicitly, or let Claude delegate automatically from the
+  capability and path details in its description.
+
+Generated Navigators are deliberately read-only. They scope a ticket before
+implementation and review the changed files and any supplied diff afterwards.
+The parent Claude session implements the change and runs the required checks.
+Canonical context remains in the Map, Charter, and Navigator briefs rather
+than in one session's conversation.
+
+Claude Code loads agent files at session start. Restart a session that was
+already open when `mauro init`, `mauro map update`, or
+`mauro navigator regenerate` changed the Navigator files. Run `/agents` after
+the restart to verify that Claude loaded them. This limitation applies to
+files written directly on disk; an agent created interactively through
+`/agents` is available immediately.
+
+Commit `.claude/agents/`, `.claude/rules/mauro/`, `docs/mauro/`, and the
+repository-owned `.mauro/` state when other worktrees, clones, or team members
+must receive the same generated views and context. The changed-path queue is
+the workflow-specific exception described above. Do not edit generated agent
+files directly. Change their Map evidence and regenerate them instead. See the
+[Claude Code subagent documentation](https://code.claude.com/docs/en/subagents#choose-the-subagent-scope)
+for the project-agent loading rules.
 
 ## Configure an Expedition
 

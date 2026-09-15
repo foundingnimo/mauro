@@ -45,6 +45,8 @@ export function runHook(event, cwd = process.cwd()) {
     const charter = report.charter.state === "complete" ? "" : ` The Charter is ${report.charter.state === "partial" ? "partial" : report.charter.state}; run /mauro charter ${report.charter.state === "partial" ? "update" : "create"}.`;
     const suspect = new Set(report.findings.filter((item) => item.code === "document-suspect").map((item) => item.path)).size;
     const review = suspect ? ` ${suspect} document${suspect === 1 ? " is" : "s are"} suspect; run /mauro docs review.` : "";
-    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${charter}${review} Run /mauro check for details.\n`);
+    const navigatorCount = Object.keys(report.state.manifest.navigators || {}).length;
+    const navigators = navigatorCount ? ` ${navigatorCount} project Navigator${navigatorCount === 1 ? " is" : "s are"} available; use /agents or /mauro who <path>.` : "";
+    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${charter}${review}${navigators} Run /mauro check for details.\n`);
   }
 }

@@ -102,7 +102,7 @@ function mapCommand(root, action, args, json) {
   }
   if (action === "update") {
     const result = updateMap(root);
-    return output({ outcome: "Map updated", files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, capabilities: result.map.capabilities.length, note: "Mauro preserved semantic capability decisions. A Map synthesizer must review new or removed units and flagged perimeter regions." }, json);
+    return output({ outcome: "Map updated", files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, capabilities: result.map.capabilities.length, note: "Mauro preserved semantic capability decisions. A Map synthesizer must review new or removed units and flagged perimeter regions. Restart other open Claude Code sessions to load changed Navigator definitions." }, json);
   }
   if (action === "verify") {
     const report = checkRepository(root);
@@ -152,7 +152,7 @@ function navigatorCommand(root, action, args, json) {
     const name = args.join(" ").trim() || "all";
     if (name !== "all" && !state.manifest.navigators[name]) throw new Error(`Unknown Navigator: ${name}`);
     const result = updateMap(root);
-    return output({ outcome: "Navigator views regenerated", requested: name, generated: Object.keys(result.manifest.navigators).length, note: "Mauro preserved semantic capability decisions." }, json);
+    return output({ outcome: "Navigator views regenerated", requested: name, generated: Object.keys(result.manifest.navigators).length, note: "Mauro preserved semantic capability decisions. Restart other open Claude Code sessions to load the regenerated Navigator definitions." }, json);
   }
   output(`Navigator ${action} needs semantic review. Use the Map as evidence and regenerate only the affected view.`);
 }
@@ -306,7 +306,8 @@ export async function runCli(argv = process.argv.slice(2)) {
       "Review flagged perimeter regions.",
       "Run the Mauro mapper agents and approve the Map at the Map gate.",
       "Run `mauro charter create`. The Charter holds the template prompts until then.",
-      "Run `mauro check`."
+      "Run `mauro check`.",
+      "Restart other open Claude Code sessions to load the generated project Navigators."
     ] }, json);
   }
   if (!isInitialized(root)) throw new Error("Mauro is not initialized. Run `mauro init`.");

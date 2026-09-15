@@ -40,9 +40,19 @@ approves capability boundaries and ownership before they become authoritative.
 
 ### Generated views
 
-Mauro generates path-scoped rules and Claude project agents from approved
+Mauro generates path-scoped rules and Claude project agents from mapped
 sources. Generated views contain source pointers. They are not independent
-knowledge stores.
+knowledge stores. Claude Code discovers the generated agents in
+`.claude/agents/` by walking up from a session's working directory. The agent
+description names its capability and primary paths so a parent session can
+delegate relevant ticket scoping and review. Generated Navigators are
+read-only; the parent session implements product changes.
+
+Claude Code loads agents at session start. A session that was already open
+when Mauro initialized, updated the Map, or regenerated Navigators must restart
+before it can use the changed definitions. Teams commit the generated agent
+files and their canonical Map and Navigator sources when they want other
+worktrees or clones to receive them.
 
 ## Durable state
 
