@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add a registered, read-only Node.js Toolbox with structured discovery and execution.
+- Tell Mauro and its agents to prefer registered tools over generated helper scripts.
+
 - Never mark a historical document suspect: the Bearing check ignores its watches.
 - Define a status report: a dated, people-only snapshot recorded as historical.
 - Suggest deleting or correcting a stale non-binding document; code wins for a document that only restates code.

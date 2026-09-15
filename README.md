@@ -24,6 +24,7 @@ Version 0.1 is a working minimum viable release:
 - Knowledge display, search, and structural validation
 - Pointer and fingerprint Bearing checks
 - Command help and stable aliases
+- A registered read-only Node.js Toolbox for recurring repository analysis
 - Claude Code agents, hooks, and workflow instructions
 
 Semantic capability mapping, context curation, and Refit proposals are
@@ -114,7 +115,27 @@ Claude uses the plugin name as the command namespace. The plugin name is
 | `where` | `w` | Find code and docs for a concept |
 
 Infrequent commands do not consume one-letter aliases: `charter`, `doctor`,
-`init`, `navigator`, `refit`, `who`, and `why`.
+`init`, `navigator`, `refit`, `tool`, `who`, and `why`.
+
+## Toolbox
+
+Mauro installs deterministic tools for operations that agents would otherwise
+reimplement as temporary scripts:
+
+```text
+mauro tool list --json
+mauro tool describe dependency-graph --json
+mauro tool run repository-files --path "apps/**" --role source --json
+mauro tool run dependency-graph --unit payments --json
+mauro tool run documentation-index --status suspect --json
+mauro tool run duplicate-analysis --path "packages/**" --json
+```
+
+Each tool declares its runtime, permissions, input schema, and output schema.
+The first Toolbox release is read-only and does not use the network. A tool can
+start only the subprocesses that it declares; the documentation index declares
+Git because its Bearing check inspects ignore rules. Results are bounded to
+protect the Claude context window.
 
 ## Project files
 

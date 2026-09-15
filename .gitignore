@@ -3,3 +3,6 @@ coverage/
 *.log
 .DS_Store
 
+
+# Session plans and investigation notes; never committed
+.claude/investigations/

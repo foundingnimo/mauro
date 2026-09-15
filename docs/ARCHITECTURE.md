@@ -14,6 +14,12 @@ pointers, and checks generated files. The core does not need a network or an
 AI provider. A validated scan policy controls package scope and file roles
 before semantic agents receive evidence.
 
+The built-in Toolbox exposes recurring deterministic analysis through the
+Mauro CLI. Each registered tool declares structured inputs, structured output,
+and permissions. Toolbox tools use the existing Node.js core. They are
+read-only and do not use the network. Each tool declares any subprocess it can
+start; the documentation index declares Git because it runs a Bearing check.
+
 ### Semantic survey
 
 Read-only mapper agents identify capabilities, boundaries, entrypoints,

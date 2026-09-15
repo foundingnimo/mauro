@@ -42,6 +42,29 @@ afterEach(() => {
   rmSync(sandbox, { recursive: true, force: true });
 });
 
+test("Toolbox discovery works before repository initialization", () => {
+  const listed = run("tool", "list", "--root", sandbox, "--json");
+  assert.equal(listed.status, 0, listed.stderr);
+  const tools = JSON.parse(listed.stdout);
+  assert.deepEqual(tools.map((tool) => tool.name), [
+    "repository-files",
+    "dependency-graph",
+    "documentation-index",
+    "duplicate-analysis"
+  ]);
+  assert.ok(tools.every((tool) => tool.runtime === "node"));
+  assert.ok(tools.every((tool) => tool.permissions.repository_read && !tool.permissions.repository_write && !tool.permissions.network));
+  assert.deepEqual(tools.find((tool) => tool.name === "documentation-index").permissions.subprocesses, ["git"]);
+  assert.ok(tools.filter((tool) => tool.name !== "documentation-index").every((tool) => tool.permissions.subprocesses.length === 0));
+
+  const described = run("tool", "describe", "repository-files", "--root", sandbox, "--json");
+  assert.equal(described.status, 0, described.stderr);
+  assert.equal(JSON.parse(described.stdout).input_schema.properties.limit.maximum, 1000);
+
+  assert.equal(run("tool", "list", "unexpected", "--root", sandbox).status, 1);
+  assert.equal(run("tool", "run", "repository-files", "--root", sandbox).status, 1);
+});
+
 test("init maps a monorepo and generates scoped Navigators", () => {
   const result = run("init", "--root", sandbox, "--json");
   assert.equal(result.status, 0, result.stderr);
@@ -61,6 +84,42 @@ test("init maps a monorepo and generates scoped Navigators", () => {
     assert.ok(readFileSync(join(sandbox, navigator.generated_agent), "utf8").includes("Generated"));
   }
   assert.ok(readFileSync(join(sandbox, "docs/mauro/charter.md"), "utf8").includes("# Mauro Charter"));
+});
+
+test("Toolbox runs bounded repository analysis without generated scripts", () => {
+  const duplicate = join(sandbox, "packages/auth/src/token-copy.ts");
+  writeFileSync(duplicate, readFileSync(join(sandbox, "packages/auth/src/token.ts")));
+  assert.equal(run("init", "--root", sandbox).status, 0);
+
+  const filesResult = run("tool", "run", "repository-files", "--path", "apps/web/src", "--role", "source", "--limit", "1", "--root", sandbox, "--json");
+  assert.equal(filesResult.status, 0, filesResult.stderr);
+  const files = JSON.parse(filesResult.stdout);
+  assert.equal(files.tool, "repository-files");
+  assert.equal(files.result.returned, 1);
+  assert.ok(files.result.files.every((file) => file.path.startsWith("apps/web/src/") && file.role === "source"));
+  assert.equal(run("tool", "run", "repository-files", "--path=", "--root", sandbox).status, 1);
+
+  const graphResult = run("tool", "run", "dependency-graph", "--unit", "web", "--root", sandbox, "--json");
+  assert.equal(graphResult.status, 0, graphResult.stderr);
+  const graph = JSON.parse(graphResult.stdout).result;
+  assert.ok(graph.units.some((unit) => unit.name === "@fixture/web"));
+  assert.ok(graph.units.some((unit) => unit.name === "@fixture/auth"));
+  assert.equal(graph.dependencies.length, 1);
+
+  const boundedGraphResult = run("tool", "run", "dependency-graph", "--unit", "web", "--limit", "1", "--root", sandbox, "--json");
+  assert.equal(boundedGraphResult.status, 0, boundedGraphResult.stderr);
+  const boundedGraph = JSON.parse(boundedGraphResult.stdout).result;
+  assert.equal(boundedGraph.units[0].name, "@fixture/web");
+  assert.equal(boundedGraph.truncated, true);
+
+  const documentsResult = run("tool", "run", "documentation-index", "--status", "all", "--root", sandbox, "--json");
+  assert.equal(documentsResult.status, 0, documentsResult.stderr);
+  assert.ok(JSON.parse(documentsResult.stdout).result.documents.some((document) => document.id === "doc-map"));
+  assert.equal(run("tool", "run", "documentation-index", "--status", "historical", "--root", sandbox, "--json").status, 0);
+
+  const duplicatesResult = run("tool", "run", "duplicate-analysis", "--path", "packages/auth/**", "--root", sandbox, "--json");
+  assert.equal(duplicatesResult.status, 0, duplicatesResult.stderr);
+  assert.ok(JSON.parse(duplicatesResult.stdout).result.groups.some((group) => group.paths.includes("packages/auth/src/token-copy.ts")));
 });
 
 test("init records ignored boundaries without reading their contents", () => {

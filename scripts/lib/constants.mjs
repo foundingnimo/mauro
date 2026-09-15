@@ -122,5 +122,5 @@ export const ALIASES = Object.freeze({
 export const PUBLIC_COMMANDS = Object.freeze([
   "charter", "check", "docs", "doctor", "help", "impact", "init",
   "knowledge", "map", "navigator", "next", "pr", "refit", "run", "status",
-  "where", "who", "why"
+  "tool", "where", "who", "why"
 ]);

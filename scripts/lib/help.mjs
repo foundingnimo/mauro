@@ -16,6 +16,7 @@ const DETAILS = {
   refit: "Propose a repository reorganization. This command does not move code.",
   run: "Start or resume a development Voyage.",
   status: "Show initialization, Map, knowledge, and Bearing state.",
+  tool: "List, describe, or run a trusted read-only tool installed with Mauro.",
   where: "Find code, documents, and knowledge for a concept.",
   who: "Find the responsible Navigator for a path.",
   why: "Explain applicable rationale for a path, symbol, or knowledge ID."
@@ -37,6 +38,7 @@ const USAGE = {
   refit: "mauro refit propose [scope]",
   run: "mauro run <objective>|status|resume",
   status: "mauro status [--json]",
+  tool: "mauro tool <list|describe|run> [name] [--option <value>] [--json]",
   where: "mauro where <concept>",
   who: "mauro who <repository path>",
   why: "mauro why <path[:symbol]|K-0001>"

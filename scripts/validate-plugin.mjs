@@ -26,6 +26,7 @@ const required = [
   "skills/mauro/SKILL.md",
   "hooks/hooks.json",
   "bin/mauro",
+  "scripts/lib/toolbox.mjs",
   "scripts/install-standalone-hooks.mjs",
   "schemas/map.schema.json",
   "schemas/manifest.schema.json",
@@ -82,8 +83,12 @@ if (existsSync(agentsDir)) {
 try {
   const output = execFileSync(process.execPath, [join(root, "bin/mauro"), "help"], { encoding: "utf8" });
   if (!output.includes("Frequent aliases:")) fail("CLI help does not list aliases.");
+  const tools = JSON.parse(execFileSync(process.execPath, [join(root, "bin/mauro"), "tool", "list", "--json"], { encoding: "utf8" }));
+  if (!tools.length || tools.some((tool) => tool.runtime !== "node" || tool.permissions.repository_write || tool.permissions.network)) {
+    fail("Toolbox discovery must expose read-only Node.js tools.");
+  }
 } catch (error) {
-  fail(`CLI help failed: ${error.message}`);
+  fail(`CLI or Toolbox validation failed: ${error.message}`);
 }
 
 if (failures.length) {

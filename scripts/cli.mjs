@@ -11,6 +11,7 @@ import { nextSteps, renderNext } from "./lib/next.mjs";
 import { initialize, isInitialized, loadState, pluginRootFrom, updateMap } from "./lib/state.mjs";
 import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
+import { describeTool, listTools, runTool } from "./lib/toolbox.mjs";
 
 function option(args, name) {
   const index = args.indexOf(name);
@@ -133,6 +134,25 @@ function navigatorCommand(root, action, args, json) {
   output(`Navigator ${action} needs semantic review. Use the Map as evidence and regenerate only the affected view.`);
 }
 
+function toolCommand(root, action, args, json) {
+  if (!action) return output(listTools(), json);
+  if (action === "list") {
+    if (args.length) throw new Error("Usage: mauro tool list");
+    return output(listTools(), json);
+  }
+  if (action === "describe") {
+    const name = args.shift();
+    if (!name || args.length) throw new Error("Usage: mauro tool describe <name>");
+    return output(describeTool(name), json);
+  }
+  if (action === "run") {
+    const name = args.shift();
+    if (!name) throw new Error("Usage: mauro tool run <name> [--option <value>]");
+    return output(runTool(root, name, args), json);
+  }
+  throw new Error(`Unknown tool action: ${action}`);
+}
+
 function prCommand(root, action, args) {
   requireCharter(root, "Pull-request context");
   const baseOption = option(args, "--base");
@@ -157,7 +177,7 @@ function installStamp(pluginRoot) {
 }
 
 function doctor(root, pluginRoot, json) {
-  const files = [".claude-plugin/plugin.json", "skills/mauro/SKILL.md", "hooks/hooks.json", "bin/mauro"];
+  const files = [".claude-plugin/plugin.json", "skills/mauro/SKILL.md", "hooks/hooks.json", "bin/mauro", "scripts/lib/toolbox.mjs"];
   const installation = files.map((path) => ({ path, present: exists(resolve(pluginRoot, path)) }));
   const result = { version: MAURO_VERSION, install: installStamp(pluginRoot), tool: installation, project_initialized: isInitialized(root) };
   if (result.project_initialized) {
@@ -195,6 +215,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     throw new Error("Refusing to initialize the Mauro source repository implicitly. Pass --root explicitly to confirm this target.");
   }
   if (command === "doctor") return doctor(root, pluginRoot, json);
+  if (command === "tool") return toolCommand(root, args.shift(), args, json);
   if (command === "init") {
     const result = initialize(root, pluginRoot);
     return output({ outcome: "Expedition scaffold created", root, files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, capabilities: result.map.capabilities.length, next: [

@@ -25,8 +25,8 @@ commands.
 
 ## Infrequent commands
 
-`charter`, `doctor`, `init`, `navigator`, `refit`, `who`, and `why` have no
-one-letter alias.
+`charter`, `doctor`, `init`, `navigator`, `refit`, `tool`, `who`, and `why`
+have no one-letter alias.
 
 ## Examples
 
@@ -42,6 +42,8 @@ one-letter alias.
 /mauro p preview
 /mauro charter update "The API package must not import the web app."
 /mauro refit propose
+/mauro tool list
+/mauro tool run dependency-graph --unit payments --json
 /mauro h knowledge
 ```
 
@@ -54,3 +56,11 @@ Mutation commands that need semantic judgment create a proposal. The skill
 shows the proposed diff before it changes a human-owned document. Pull-request
 updates, commits, pushes, deployments, and product-code moves require explicit
 authorization.
+
+## Toolbox
+
+`tool list` and `tool describe <name>` expose the installed operations and
+their runtime, permissions, input schema, and output schema. Discovery works
+before Mauro initializes a repository. `tool run <name>` requires an
+initialized repository. The installed operations are read-only, network-free,
+and bounded; inspect each operation's declared subprocesses before execution.

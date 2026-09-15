@@ -28,7 +28,7 @@ Parse the first token in `$ARGUMENTS` as a command. Use this exact alias table:
 | `w` | `where` |
 
 Do not infer prefixes. Infrequent commands have no alias: `charter`, `doctor`,
-`init`, `navigator`, `refit`, `who`, and `why`.
+`init`, `navigator`, `refit`, `tool`, `who`, and `why`.
 
 If no command or an unknown command is present, show help. Read
 [references/commands.md](references/commands.md) for exact routing and examples.
@@ -62,6 +62,10 @@ Mauro artifact.
 Read [references/configuration.md](references/configuration.md) before an
 Expedition, Map update, or semantic repository survey.
 
+Before writing a helper script, read [references/toolbox.md](references/toolbox.md)
+and use a registered Mauro tool when it covers the operation. Prefer direct
+system utilities next. Create only unavoidable helper scripts in temporary storage.
+
 ## Route workflows
 
 - `init`: read [references/expedition.md](references/expedition.md).
@@ -69,6 +73,7 @@ Expedition, Map update, or semantic repository survey.
 - `knowledge`, `why`, or `who`: read
   [references/knowledge.md](references/knowledge.md).
 - `next`: run `mauro next`, show its output, and offer to start the first suggestion.
+- `tool`: read [references/toolbox.md](references/toolbox.md).
 - `check`, `docs`, or `map update`: read
   [references/maintenance.md](references/maintenance.md).
 - `pr`: read [references/pr-context.md](references/pr-context.md).

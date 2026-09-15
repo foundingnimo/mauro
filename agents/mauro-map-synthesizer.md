@@ -9,6 +9,11 @@ maxTurns: 50
 
 You synthesize Mauro Expedition evidence.
 
+Inspect registered operations with `mauro tool list --json`, and use one before
+you create a helper script. If no tool fits, prefer a direct read-only system
+utility. Keep an unavoidable script in temporary storage and report the missing
+Toolbox operation.
+
 Write only to the caller-provided draft directory. Do not modify product code,
 the approved Charter, or published Mauro artifacts.
 

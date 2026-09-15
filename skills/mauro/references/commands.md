@@ -27,6 +27,7 @@ Use exact command names and aliases. Do not resolve partial names.
 | `init` | Run the first repository Expedition. |
 | `navigator` | List, show, regenerate, or request specialist review. |
 | `refit` | Show or propose repository restructuring. |
+| `tool` | List, describe, or run a trusted read-only Toolbox operation. |
 | `who` | Find the responsible Navigator for a path or capability. |
 | `why` | Explain rationale for a path, symbol, or knowledge ID. |
 
@@ -95,6 +96,21 @@ Mutation commands create proposals. Promote them only after context review.
 ```
 
 Queries are read-only.
+
+## Toolbox
+
+```text
+/mauro tool list
+/mauro tool describe repository-files
+/mauro tool run repository-files --path "apps/**" --role source --json
+/mauro tool run dependency-graph --unit payments --json
+/mauro tool run documentation-index --status suspect --json
+/mauro tool run duplicate-analysis --path "packages/**" --json
+```
+
+`list` and `describe` work before initialization. `run` requires an initialized
+repository. Toolbox operations are read-only, bounded, and implemented in the
+Mauro Node.js runtime.
 
 ## Navigator
 
