@@ -422,3 +422,14 @@ test("Map update never deletes a product file named by untrusted state", () => {
   assert.equal(update.status, 0, update.stderr);
   assert.equal(readFileSync(product, "utf8"), before);
 });
+
+test("a modified tracked file keeps its full path in the changed-path list", async () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  assert.equal(git("add", ".").status, 0);
+  assert.equal(git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "baseline").status, 0);
+  writeFileSync(join(sandbox, "package.json"), `${readFileSync(join(sandbox, "package.json"), "utf8")}\n`);
+  const { gitChangedPaths } = await import(join(packageRoot, "scripts/lib/git.mjs"));
+  // `git status --porcelain` starts a modified line with a space. A trim of the
+  // whole output removed that space and the parser sliced the first letter off.
+  assert.deepEqual(gitChangedPaths(sandbox), ["package.json"]);
+});

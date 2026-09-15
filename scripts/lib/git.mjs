@@ -5,7 +5,7 @@ function git(root, args, fallback = null) {
     return execFileSync("git", ["-C", root, ...args], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
-    }).trim();
+    }).trimEnd();
   } catch {
     return fallback;
   }
