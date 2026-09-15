@@ -13,6 +13,47 @@ function safeText(value) {
   return String(value).replace(/[\r\n\u0000]+/g, " ").replace(/`/g, "ˋ").trim().slice(0, 300);
 }
 
+// A purpose written by a Map synthesizer can run past 300 characters. Keep the
+// sanitising and only cap it at a paragraph.
+function safeParagraph(value) {
+  return String(value).replace(/[\r\n\u0000]+/g, " ").replace(/`/g, "ˋ").trim().slice(0, 1200);
+}
+
+function safeCommand(value) {
+  return String(value).replace(/[\r\n\u0000]+/g, " ").replace(/`/g, "ˋ").trim().slice(0, 300);
+}
+
+function listOrNone(items, none, render = (item) => `- \`${safeText(item)}\``) {
+  return items && items.length ? items.map(render).join("\n") : none;
+}
+
+// Semantic fields a synthesizer may attach to a capability. Each one is
+// optional. A deterministic draft has none of them, so its brief stays short.
+function renderSemanticSections(capability) {
+  const sections = [];
+  if (capability.entrypoints?.length) {
+    sections.push("## Entrypoints", "", listOrNone(capability.entrypoints), "");
+  }
+  if (capability.invariants?.length) {
+    sections.push("## Invariants to protect", "");
+    capability.invariants.forEach((invariant, index) => {
+      sections.push(`${index + 1}. ${safeParagraph(invariant.statement)}`);
+      if (invariant.evidence?.length) sections.push(`   - Evidence: ${invariant.evidence.map((item) => `\`${safeText(item)}\``).join(", ")}`);
+      if (typeof invariant.confidence === "number") sections.push(`   - Confidence: ${invariant.confidence}`);
+    });
+    sections.push("");
+  }
+  if (capability.review?.length) {
+    sections.push("## Required review", "", "Ask for another Navigator when a change crosses this boundary.", "");
+    sections.push(listOrNone(capability.review, "", (item) => `- ${safeText(item.navigator)}, because ${safeParagraph(item.reason)}`), "");
+  }
+  if (capability.verification?.length) {
+    sections.push("## Verification", "", "Run these and report the observed output. Do not claim a result you did not see.", "", "```bash");
+    sections.push(...capability.verification.map(safeCommand), "```", "");
+  }
+  return sections.length ? `${sections.join("\n")}\n` : "";
+}
+
 export function renderMap(map) {
   const lines = [
     "# Repository Map",
@@ -109,9 +150,10 @@ confidence: ${capability.confidence}
 
 ## Responsibility
 
-${safeText(capability.purpose)}
+${safeParagraph(capability.purpose)}
 
 - Boundary state: ${capability.approved === true ? "Human-approved" : "Preliminary"}
+- Provenance: ${safeText(capability.provenance || "deterministic-draft")}
 
 ## Primary paths
 
@@ -125,9 +167,9 @@ ${capability.secondary_paths.length ? capability.secondary_paths.map((path) => `
 
 ${capability.evidence.map((path) => `- \`${safeText(path)}\``).join("\n")}
 
-## Working rules
+${renderSemanticSections(capability)}## Working rules
 
-- Read the Charter before you propose an architecture change.
+${(capability.rules || []).map((rule) => `- ${safeParagraph(rule)}`).join("\n")}${capability.rules?.length ? "\n" : ""}- Read the Charter before you propose an architecture change.
 - Read active knowledge that applies to the changed paths.
 - Verify an inference against code or tests.
 - Report a conflict between the Map and the repository.

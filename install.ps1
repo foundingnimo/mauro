@@ -1,4 +1,4 @@
-param([switch]$NoHooks)
+param([switch]$NoHooks, [switch]$Update)
 
 $ErrorActionPreference = "Stop"
 
@@ -7,8 +7,13 @@ $MauroClaudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { 
 $MauroRuntimeDir = Join-Path $MauroClaudeDir "mauro"
 $MauroSkillDir = Join-Path $MauroClaudeDir "skills\mauro"
 
-if ((Test-Path $MauroRuntimeDir) -or (Test-Path $MauroSkillDir)) {
-  throw "Mauro is already installed. Remove the old installation or use plugin mode."
+if ($Update) {
+  if (-not (Test-Path $MauroRuntimeDir)) { throw "Mauro is not installed. Run install.ps1 without -Update." }
+  # Replace the runtime and the skill from this checkout. Hooks and settings stay.
+  Remove-Item -Recurse -Force -Path $MauroRuntimeDir
+  if (Test-Path $MauroSkillDir) { Remove-Item -Recurse -Force -Path $MauroSkillDir }
+} elseif ((Test-Path $MauroRuntimeDir) -or (Test-Path $MauroSkillDir)) {
+  throw "Mauro is already installed. Run install.ps1 -Update to replace it from this checkout, or use plugin mode."
 }
 
 New-Item -ItemType Directory -Force -Path $MauroRuntimeDir | Out-Null
@@ -20,6 +25,10 @@ Copy-Item -Path (Join-Path $MauroSourceDir "package.json") -Destination $MauroRu
 Copy-Item -Path (Join-Path $MauroSourceDir "LICENSE") -Destination $MauroRuntimeDir
 Copy-Item -Recurse -Path (Join-Path $MauroSourceDir "skills\mauro") -Destination $MauroSkillDir
 
+if ($Update) {
+  Write-Host "Updated Mauro from $MauroSourceDir. Restart Claude Code."
+  exit 0
+}
 if (-not $NoHooks) {
   & node (Join-Path $MauroRuntimeDir "scripts\install-standalone-hooks.mjs") $MauroClaudeDir
   if ($LASTEXITCODE -ne 0) { throw "Mauro hook installation failed." }

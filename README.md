@@ -54,6 +54,17 @@ Restart Claude Code. Run:
 Standalone mode keeps the short command name. Both normal installation modes
 add automatic session and change hooks.
 
+To push a change from this checkout into an existing standalone installation,
+run:
+
+```bash
+./install.sh --update      # PowerShell: ./install.ps1 -Update
+```
+
+The update replaces `~/.claude/mauro` and `~/.claude/skills/mauro` from the
+checkout. It does not touch `settings.json` or the hooks. Restart Claude Code
+afterwards, because the running session keeps the old skill text.
+
 ### Plugin development
 
 Load this checkout directly:

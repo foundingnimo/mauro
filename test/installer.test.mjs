@@ -37,3 +37,35 @@ test("standalone hook installation preserves settings and is idempotent", () => 
     rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("install.sh --update replaces the runtime and skill and leaves settings alone", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "mauro-install-"));
+  try {
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: sandbox };
+    const first = spawnSync("sh", [join(packageRoot, "install.sh"), "--no-hooks"], { encoding: "utf8", env });
+    assert.equal(first.status, 0, first.stderr);
+    const again = spawnSync("sh", [join(packageRoot, "install.sh"), "--no-hooks"], { encoding: "utf8", env });
+    assert.notEqual(again.status, 0);
+    assert.match(again.stdout, /--update/);
+
+    const settingsPath = join(sandbox, "settings.json");
+    writeFileSync(settingsPath, `${JSON.stringify({ model: "sonnet" })}\n`);
+    const marker = join(sandbox, "mauro/scripts/lib/git.mjs");
+    writeFileSync(marker, "// stale installed copy\n");
+
+    const update = spawnSync("sh", [join(packageRoot, "install.sh"), "--update"], { encoding: "utf8", env });
+    assert.equal(update.status, 0, update.stderr);
+    assert.equal(readFileSync(marker, "utf8"), readFileSync(join(packageRoot, "scripts/lib/git.mjs"), "utf8"));
+    assert.equal(
+      readFileSync(join(sandbox, "skills/mauro/SKILL.md"), "utf8"),
+      readFileSync(join(packageRoot, "skills/mauro/SKILL.md"), "utf8")
+    );
+    // --update never runs the hook installer, so settings.json is untouched.
+    assert.deepEqual(JSON.parse(readFileSync(settingsPath, "utf8")), { model: "sonnet" });
+
+    const bogus = spawnSync("sh", [join(packageRoot, "install.sh"), "--upgrade"], { encoding: "utf8", env });
+    assert.notEqual(bogus.status, 0);
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});

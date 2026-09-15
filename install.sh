@@ -6,8 +6,24 @@ MAURO_CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-"${HOME}/.claude"}
 MAURO_RUNTIME_DIR="${MAURO_CLAUDE_DIR}/mauro"
 MAURO_SKILL_DIR="${MAURO_CLAUDE_DIR}/skills/mauro"
 
-if [ -e "${MAURO_RUNTIME_DIR}" ] || [ -e "${MAURO_SKILL_DIR}" ]; then
-  echo "Mauro is already installed. Remove the old installation or use plugin mode."
+MAURO_MODE=install
+for MAURO_ARG in "$@"; do
+  case "${MAURO_ARG}" in
+    --update) MAURO_MODE=update ;;
+    --no-hooks) ;;
+    *) echo "Unknown option: ${MAURO_ARG}. Use --update and/or --no-hooks."; exit 1 ;;
+  esac
+done
+
+if [ "${MAURO_MODE}" = update ]; then
+  if [ ! -e "${MAURO_RUNTIME_DIR}" ]; then
+    echo "Mauro is not installed. Run ./install.sh without --update."
+    exit 1
+  fi
+  # Replace the runtime and the skill from this checkout. Hooks and settings stay.
+  rm -rf "${MAURO_RUNTIME_DIR}" "${MAURO_SKILL_DIR}"
+elif [ -e "${MAURO_RUNTIME_DIR}" ] || [ -e "${MAURO_SKILL_DIR}" ]; then
+  echo "Mauro is already installed. Run ./install.sh --update to replace it from this checkout, or use plugin mode."
   exit 1
 fi
 
@@ -20,11 +36,19 @@ cp "${MAURO_SOURCE_DIR}/LICENSE" "${MAURO_RUNTIME_DIR}/LICENSE"
 cp -R "${MAURO_SOURCE_DIR}/skills/mauro" "${MAURO_SKILL_DIR}"
 chmod +x "${MAURO_RUNTIME_DIR}/bin/mauro"
 
-if [ "${1:-}" != "--no-hooks" ]; then
+MAURO_HOOKS=yes
+for MAURO_ARG in "$@"; do
+  [ "${MAURO_ARG}" = "--no-hooks" ] && MAURO_HOOKS=no
+done
+if [ "${MAURO_MODE}" = update ]; then
+  echo "Updated Mauro from ${MAURO_SOURCE_DIR}. Restart Claude Code."
+  exit 0
+fi
+if [ "${MAURO_HOOKS}" = yes ]; then
   node "${MAURO_RUNTIME_DIR}/scripts/install-standalone-hooks.mjs" "${MAURO_CLAUDE_DIR}"
 fi
 
 echo "Installed Mauro. Restart Claude Code, then run /mauro help."
-if [ "${1:-}" = "--no-hooks" ]; then
+if [ "${MAURO_HOOKS}" = no ]; then
   echo "Hooks were not installed. Run /mauro check at session start."
 fi

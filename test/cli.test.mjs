@@ -433,3 +433,61 @@ test("a modified tracked file keeps its full path in the changed-path list", asy
   // whole output removed that space and the parser sliced the first letter off.
   assert.deepEqual(gitChangedPaths(sandbox), ["package.json"]);
 });
+
+test("map update keeps a human-approved capability that spans several units", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  const mapPath = join(sandbox, ".mauro/map.json");
+  const map = JSON.parse(readFileSync(mapPath, "utf8"));
+  const drafts = map.capabilities.map((item) => item.id).sort();
+  assert.deepEqual(drafts, ["cap-apps-web", "cap-fixture-root", "cap-packages-auth"]);
+  map.capabilities = [
+    {
+      id: "cap-identity",
+      name: "Identity",
+      purpose: "Own sign-in for the web app and the auth package.",
+      primary_paths: ["apps/web/**", "packages/auth/**"],
+      secondary_paths: [],
+      units: ["unit-apps-web", "unit-packages-auth"],
+      entrypoints: ["packages/auth/src/index.ts"],
+      invariants: [{ statement: "A session token is never logged.", evidence: ["packages/auth/src/index.ts"], confidence: 0.8 }],
+      review: [{ navigator: "cap-fixture-root", reason: "the workspace build wires the package." }],
+      verification: ["npm test --workspace packages/auth"],
+      rules: ["Keep the token format in one module."],
+      confidence: 0.9,
+      evidence: ["packages/auth/package.json"],
+      provenance: "human-approved",
+      approved: true
+    },
+    map.capabilities.find((item) => item.id === "cap-fixture-root")
+  ];
+  writeFileSync(mapPath, `${JSON.stringify(map, null, 2)}\n`);
+  const update = run("map", "update", "--root", sandbox);
+  assert.equal(update.status, 0, update.stderr);
+  const after = JSON.parse(readFileSync(mapPath, "utf8"));
+  // The approved boundary survives and the drafts for the units it covers do not
+  // come back. The workspace draft that nothing covers is still there.
+  assert.deepEqual(after.capabilities.map((item) => item.id).sort(), ["cap-fixture-root", "cap-identity"]);
+  const identity = after.capabilities.find((item) => item.id === "cap-identity");
+  assert.equal(identity.approved, true);
+  assert.equal(identity.provenance, "human-approved");
+  assert.ok(existsSync(join(sandbox, "docs/mauro/navigators/identity.md")));
+  assert.ok(!existsSync(join(sandbox, "docs/mauro/navigators/packages-auth.md")));
+  // The regenerated brief keeps every semantic field the Map carries.
+  const brief = readFileSync(join(sandbox, "docs/mauro/navigators/identity.md"), "utf8");
+  for (const expected of [
+    "- Provenance: human-approved",
+    "## Entrypoints",
+    "- `packages/auth/src/index.ts`",
+    "## Invariants to protect",
+    "1. A session token is never logged.",
+    "## Required review",
+    "- cap-fixture-root, because the workspace build wires the package.",
+    "## Verification",
+    "npm test --workspace packages/auth",
+    "- Keep the token format in one module."
+  ]) assert.ok(brief.includes(expected), `missing: ${expected}`);
+  const regenerate = run("navigator", "regenerate", "all", "--root", sandbox);
+  assert.equal(regenerate.status, 0, regenerate.stderr);
+  assert.match(regenerate.stdout, /generated: 2/);
+});

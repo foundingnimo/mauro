@@ -132,6 +132,48 @@ export function initialize(root, pluginRoot) {
   return { map, manifest, fingerprints };
 }
 
+function isSemanticCapability(capability) {
+  return capability.approved === true || capability.provenance === "semantic" || capability.provenance === "human-approved";
+}
+
+function pathCoversRoot(pattern, root) {
+  const prefix = pattern === "**" ? "." : pattern.replace(/\/\*\*$/, "");
+  if (prefix === "." || root === ".") return prefix === root;
+  return prefix === root || prefix.startsWith(`${root}/`) || root.startsWith(`${prefix}/`);
+}
+
+function capabilityCoversUnit(capability, unit) {
+  if ((capability.units || []).includes(unit.id)) return true;
+  return (capability.primary_paths || []).some((pattern) => pathCoversRoot(pattern, unit.root));
+}
+
+// A scan produces one deterministic draft per unit. A semantic or human-approved
+// capability can span several units and carries an id the scan never produces.
+// Keep every semantic capability. Keep a deterministic draft only for a unit that
+// no semantic capability covers, so a unit that is new to the tree still surfaces
+// for review while an approved boundary never reverts to per-package drafts.
+export function mergeCapabilities(previousCapabilities, scannedCapabilities, units) {
+  const previousById = new Map(previousCapabilities.map((item) => [item.id, item]));
+  const unitsById = new Map(units.map((unit) => [unit.id, unit]));
+  const semantic = previousCapabilities.filter(isSemanticCapability);
+  const merged = [];
+  for (const capability of scannedCapabilities) {
+    const previous = previousById.get(capability.id);
+    if (previous && isSemanticCapability(previous)) {
+      merged.push({ ...capability, ...previous, id: capability.id });
+      continue;
+    }
+    const unit = unitsById.get(`unit-${capability.id.slice(4)}`);
+    if (unit && semantic.some((item) => capabilityCoversUnit(item, unit))) continue;
+    merged.push(capability);
+  }
+  const mergedIds = new Set(merged.map((item) => item.id));
+  for (const capability of semantic) {
+    if (!mergedIds.has(capability.id)) merged.push(capability);
+  }
+  return merged;
+}
+
 export function updateMap(root) {
   const current = loadState(root);
   const scanned = scanRepository(root, current.config);
@@ -139,14 +181,7 @@ export function updateMap(root) {
   const newUnits = new Set(scanned.units.map((unit) => unit.id));
   const addedUnits = scanned.units.filter((unit) => !oldUnits.has(unit.id));
   const removedUnits = current.map.units.filter((unit) => !newUnits.has(unit.id));
-  const previousCapabilities = new Map(current.map.capabilities.map((item) => [item.id, item]));
-  const capabilities = scanned.capabilities.map((capability) => {
-    const previous = previousCapabilities.get(capability.id);
-    if (!previous) return capability;
-    return previous.provenance === "deterministic-draft" && previous.approved !== true
-      ? capability
-      : { ...capability, ...previous, id: capability.id };
-  });
+  const capabilities = mergeCapabilities(current.map.capabilities, scanned.capabilities, scanned.units);
   const map = {
     ...scanned,
     capabilities,
