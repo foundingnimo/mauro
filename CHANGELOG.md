@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Record the commit that each document fingerprint describes (`verified_commit`, `verified_at`, `verified_dirty`, `verified_evidence`).
+- Add `mauro docs review`: one review packet per suspect document, with the diff, commits and untracked files since the verification commit.
+- Add `mauro docs confirm <id> --evidence <file>`: record a review that found a document still holds.
+- Add the `mauro-docs-reviewer` agent and the document review workflow; a binding document needs two independent verdicts.
+- Point `mauro next` and the session-start message at the document review instead of an update.
+
 ## 0.1.1 (2026-09-15)
 
 - Add a registered, read-only Node.js Toolbox with structured discovery and execution.

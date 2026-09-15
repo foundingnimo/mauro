@@ -58,7 +58,8 @@ only records that pass.
 
 ## Finish
 
-1. Update affected documentation or mark it suspect.
+1. Run the document review for each document that the Voyage made suspect.
+   See `maintenance.md`, section "Document review".
 2. Update fingerprints.
 3. Regenerate affected Claude rules and Navigators.
 4. Run a Bearing check.

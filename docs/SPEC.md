@@ -111,6 +111,16 @@ constraint, a required workaround, or a cross-package boundary. The pointer
 must resolve to a manifest record. An Expedition can propose pointers but must
 not add them to product files.
 
+## Document review requirements
+
+A suspect document is reviewed, not assumed wrong. Mauro records the commit
+that the fingerprints of each document describe. A review packet gives the
+change since that commit. An agent verifies each affected claim against the
+current code and cites evidence. A verdict of `holds` confirms the document and
+needs a Chronicle record. A binding document needs two independent `holds`
+verdicts. A proposed change to a human-owned document needs approval. A
+historical document is never reviewed.
+
 ## Voyage requirements
 
 Run a Bearing check before planning. Resolve the primary Navigator, review

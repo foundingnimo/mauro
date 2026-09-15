@@ -74,7 +74,7 @@ system utilities next. Create only unavoidable helper scripts in temporary stora
   [references/knowledge.md](references/knowledge.md).
 - `next`: run `mauro next`, show its output, and offer to start the first suggestion.
 - `tool`: read [references/toolbox.md](references/toolbox.md).
-- `check`, `docs`, or `map update`: read
+- `check`, `docs`, `docs review`, or `map update`: read
   [references/maintenance.md](references/maintenance.md).
 - `pr`: read [references/pr-context.md](references/pr-context.md).
 - `refit`: read [references/refit.md](references/refit.md).

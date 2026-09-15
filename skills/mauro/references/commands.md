@@ -136,6 +136,21 @@ knowledge stores.
 `preview` and `check` are read-only. `update` requires authorization for the
 external write.
 
+## Docs
+
+```text
+/mauro docs status
+/mauro docs check
+/mauro docs review [id]
+/mauro docs confirm <id> --evidence <file>
+```
+
+`status`, `check`, and `review` are read-only. `review` builds one review
+packet for each suspect document. `confirm` records a review verdict of
+`holds`. It refreshes the fingerprints of the document and records HEAD as the
+verification commit. It refuses without an evidence file under
+`docs/mauro/chronicles/`. See `maintenance.md`, section "Document review".
+
 ## Other
 
 ```text
@@ -143,8 +158,6 @@ external write.
 /mauro suggest
 /mauro status
 /mauro check
-/mauro docs status
-/mauro docs check
 /mauro refit propose
 /mauro doctor
 /mauro run "<objective>"

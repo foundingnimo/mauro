@@ -33,6 +33,7 @@ have no one-letter alias.
 ```text
 /mauro init
 /mauro c
+/mauro docs review
 /mauro m find authentication
 /mauro w "token rotation"
 /mauro who packages/auth/src/token.ts

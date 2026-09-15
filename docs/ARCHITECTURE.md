@@ -83,6 +83,16 @@ Plugin hooks run from the packaged `hooks/hooks.json`. The standalone installer
 merges equivalent hooks into the user settings file and creates a backup. All
 hooks return immediately in repositories that do not use Mauro.
 
+Each document records its verification commit: the Git commit that its
+fingerprints describe. The fingerprints decide which documents need a review.
+The verification commit shows what changed. `mauro docs review` gives the diff
+from that commit, the commit subjects, and the untracked files in the watched
+paths. A missing or unreachable commit gives a full review. The
+`mauro-docs-reviewer` agent checks the document against the current code. When
+the document still holds, `mauro docs confirm` refreshes the fingerprints and
+records HEAD as the new verification commit. The confirmation needs a Chronicle
+file that records the review.
+
 ## Update levels
 
 - A local Map update rechecks affected capabilities after normal source edits.

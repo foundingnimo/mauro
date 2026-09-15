@@ -315,3 +315,15 @@ test("the session-start message points at the document review", () => {
   append("packages/auth/src/token.ts", "\n// rotated\n");
   assert.match(ok("hook", "session-start", "--root", sandbox).stdout, /\d+ documents? (is|are) suspect; run \/mauro docs review\./);
 });
+
+test("the reviewer agent and the review workflow ship with the skill", () => {
+  const agent = readFileSync(join(packageRoot, "agents/mauro-docs-reviewer.md"), "utf8");
+  assert.match(agent, /^---\nname: mauro-docs-reviewer\n/);
+  assert.match(agent, /\ndisallowedTools: Write, Edit\n/);
+  assert.match(agent, /"verdict": "holds \| needs-change \| unsure"/);
+  const maintenance = readFileSync(join(packageRoot, "skills/mauro/references/maintenance.md"), "utf8");
+  assert.match(maintenance, /## Document review/);
+  assert.match(maintenance, /mauro docs review --json/);
+  assert.match(maintenance, /mauro docs confirm <id> --evidence <file>/);
+  assert.match(readFileSync(join(packageRoot, "skills/mauro/references/voyage.md"), "utf8"), /Run the document review/);
+});

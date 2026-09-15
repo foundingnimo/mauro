@@ -73,6 +73,40 @@ maintained.
 - A status report can carry counts, because every count is true of its date.
 - Never update an earlier report. Never cite a report in a rule or Navigator.
 
+## Document review
+
+A suspect document is not wrong. Its evidence changed. A review decides.
+
+Run the review when `mauro next` asks for it, at the end of a Voyage, or when
+the user asks. Do not run it for each commit. Each review is an agent run.
+
+1. Run `mauro docs review --json`. Each packet names the document, the changed
+   watches, and the review mode.
+   - `diff` mode: the packet holds the diff and the commit subjects since the
+     verification commit, and the untracked files in the watched paths.
+   - `full` mode: no usable verification commit exists. The reviewer checks the
+     whole document against the current code.
+2. Launch `mauro-docs-reviewer` for each packet. Give it the packet and the
+   repository root. As a plugin, use `foundingnimo:mauro-docs-reviewer`. In a
+   standalone installation, give the body of
+   `~/.claude/mauro/agents/mauro-docs-reviewer.md` to an agent that cannot
+   write files.
+3. For a binding document, launch two reviewers independently. Treat the
+   verdict as `holds` only when both reviewers return `holds`.
+4. Write the Chronicle file
+   `docs/mauro/chronicles/reviews/<YYYY-MM-DD>-<document-id>.md`. Record the
+   document, the base commit and HEAD, the changed watches, the commit
+   subjects, each verdict and its confidence, and the claims table. Do not
+   store a raw transcript.
+5. Act on the verdict:
+   - `holds`: run `mauro docs confirm <id> --evidence <file>`. Mauro refreshes
+     the fingerprints and records HEAD as the new verification commit.
+   - `needs-change`: show the proposed change. Apply the rule in "Stale
+     documents: code wins". Change a human-owned document only after approval.
+     After the change, review the document again. Then confirm it.
+   - `unsure`: leave the document suspect. Report each claim that the reviewer
+     could not verify.
+
 ## Changes outside Mauro
 
 Hooks record changed paths. A Stop hook also scans Git status because shell
