@@ -25,7 +25,7 @@ const DETAILS = {
 const USAGE = {
   charter: "mauro charter <create|show|update|diff|validate>",
   check: "mauro check [--json]",
-  docs: "mauro docs <status|check|review [id]|confirm <id> --evidence <file>> [--json]",
+  docs: "mauro docs <status|check|review [id] [--allow-behind]|confirm <id> --evidence <file>> [--json]",
   doctor: "mauro doctor",
   help: "mauro help [command]",
   impact: "mauro impact <proposed change>",
@@ -36,7 +36,7 @@ const USAGE = {
   navigator: "mauro navigator <list|show|regenerate|review> [value]",
   pr: "mauro pr <preview|check|update|reviewers> [--base <ref>]",
   refit: "mauro refit propose [scope]",
-  run: "mauro run <objective>|status|resume",
+  run: "mauro run <objective>|status|resume [--allow-behind]",
   status: "mauro status [--json]",
   tool: "mauro tool <list|describe|run|gaps|gap> [action] [--json]",
   where: "mauro where <concept>",

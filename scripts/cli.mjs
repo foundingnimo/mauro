@@ -9,6 +9,7 @@ import { impact, knowledge, matchingNavigators, where, who, why } from "./lib/qu
 import { renderPrContext } from "./lib/render.mjs";
 import { nextSteps, renderNext } from "./lib/next.mjs";
 import { confirmDocument, renderReview, reviewPackets } from "./lib/review.mjs";
+import { assertBranchCurrent } from "./lib/freshness.mjs";
 import { initialize, isInitialized, loadState, pluginRootFrom, updateMap } from "./lib/state.mjs";
 import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
@@ -114,6 +115,7 @@ function mapCommand(root, action, args, json) {
 
 function docsCommand(root, action, args, json) {
   if (action === "review") {
+    assertBranchCurrent(root, { action: "review", allowBehind: Boolean(option(args, "--allow-behind")) });
     const result = reviewPackets(root, { id: args.join(" ").trim() || null });
     return output(json ? result : renderReview(result), json);
   }
@@ -337,6 +339,7 @@ export async function runCli(argv = process.argv.slice(2)) {
   }
   if (command === "pr") return prCommand(root, action || "preview", args);
   if (command === "run") {
+    assertBranchCurrent(root, { action: "plan", allowBehind: Boolean(option(args, "--allow-behind")) });
     const report = checkRepository(root);
     return output({ voyage: [action, ...args].filter(Boolean).join(" ") || "status", bearing: report.current ? "current" : "needs attention", charter: report.charter.state, required: report.charter.state === "complete"
       ? "Load the responsible Navigators and active knowledge before implementation."

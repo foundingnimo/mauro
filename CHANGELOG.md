@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refuse a review or a Voyage plan while the branch is behind its upstream, and state how far behind; `--allow-behind` continues.
+
 - Add a project-local Tool Gap Log for recurring operations that the Toolbox does not provide.
 - Deduplicate gap reports by Voyage and reporter, and promote candidates after repeated evidence.
 - Add Tool Gap list, show, record, dismiss, resolve, and redacted export commands.

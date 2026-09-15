@@ -167,6 +167,11 @@ mauro docs review --json     # the packets an agent reads
 mauro docs confirm <id> --evidence docs/mauro/chronicles/reviews/<file>.md
 ```
 
+`mauro docs review` refuses while the branch is behind the branch it tracks,
+and states the distance, because a review describes the tree it runs against.
+`--allow-behind` continues anyway. `mauro run` applies the same guard before a
+plan.
+
 A packet holds the diff since the verification commit, the commit subjects, and
 the untracked files in the watched paths. Without a usable commit, the packet
 asks for a full review of the document against the current code. The

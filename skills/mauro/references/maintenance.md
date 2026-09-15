@@ -81,7 +81,11 @@ Run the review when `mauro next` asks for it, at the end of a Voyage, or when
 the user asks. Do not run it for each commit. Each review is an agent run.
 
 1. Run `mauro docs review --json`. Each packet names the document, the changed
-   watches, and the review mode.
+   watches, and the review mode. The command refuses while the branch is behind
+   its upstream, and says how far behind. Rebase or merge first. A review
+   describes the tree it runs against, so a stale checkout gives a confident
+   answer about code that has already changed. `--allow-behind` continues
+   anyway, and the Chronicle must then record that the tree was behind.
    - `diff` mode: the packet holds the diff and the commit subjects since the
      verification commit, and the untracked files in the watched paths.
    - `full` mode: no usable verification commit exists. The reviewer checks the

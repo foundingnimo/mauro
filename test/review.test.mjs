@@ -327,3 +327,58 @@ test("the reviewer agent and the review workflow ship with the skill", () => {
   assert.match(maintenance, /mauro docs confirm <id> --evidence <file>/);
   assert.match(readFileSync(join(packageRoot, "skills/mauro/references/voyage.md"), "utf8"), /Run the document review/);
 });
+
+// A branch behind its upstream produces confident findings about code that has
+// already changed. The guard states the scale of the drift and refuses.
+function behindUpstream() {
+  git("init", "--quiet");
+  commitAll("fixture");
+  ok("init", "--root", sandbox);
+  commitAll("mauro state");
+  git("branch", "base");
+  git("checkout", "--quiet", "-b", "work");
+  git("branch", "--set-upstream-to=base", "work");
+  git("checkout", "--quiet", "base");
+  append("packages/auth/src/token.ts", "\n// upstream moved\n");
+  commitAll("Rotate the token format");
+  git("checkout", "--quiet", "work");
+}
+
+test("docs review refuses while the branch is behind its upstream", () => {
+  behindUpstream();
+  const refused = run("docs", "review", "--root", sandbox);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /1 commit behind base/);
+  assert.match(refused.stderr, /--allow-behind/);
+  const allowed = run("docs", "review", "--allow-behind", "--root", sandbox);
+  assert.equal(allowed.status, 0, allowed.stderr);
+});
+
+test("run refuses to plan against a branch that is behind its upstream", () => {
+  behindUpstream();
+  const refused = run("run", "Update the guide", "--root", sandbox);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /1 commit behind base/);
+  const allowed = run("run", "Update the guide", "--allow-behind", "--root", sandbox);
+  assert.equal(allowed.status, 0, allowed.stderr);
+});
+
+test("a branch level with or ahead of its upstream is not refused", () => {
+  git("init", "--quiet");
+  commitAll("fixture");
+  ok("init", "--root", sandbox);
+  commitAll("mauro state");
+  git("branch", "base");
+  git("checkout", "--quiet", "-b", "work");
+  git("branch", "--set-upstream-to=base", "work");
+  assert.equal(run("docs", "review", "--root", sandbox).status, 0);
+  append("packages/auth/src/token.ts", "\n// ours\n");
+  commitAll("Our own commit");
+  assert.equal(run("docs", "review", "--root", sandbox).status, 0);
+});
+
+test("without an upstream nothing is refused", () => {
+  guidedRepository();
+  assert.equal(run("docs", "review", "--root", sandbox).status, 0);
+  assert.equal(run("run", "Update the guide", "--root", sandbox).status, 0);
+});

@@ -5,7 +5,9 @@ knowledge from the work.
 
 ## Before planning
 
-1. Run a Bearing check.
+1. Run a Bearing check. `mauro run` refuses while the branch is behind its
+   upstream and states the distance. Rebase or merge before planning, or pass
+   `--allow-behind` and record the decision in the plan.
 2. Resolve relevant capabilities, paths, knowledge, and documents.
 3. Report suspect binding knowledge before implementation.
 4. Select one primary Navigator and all required reviewing Navigators.
