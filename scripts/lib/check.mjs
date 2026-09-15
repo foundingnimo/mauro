@@ -62,7 +62,10 @@ export function checkRepository(root) {
     if (document.status === "suspect" || document.status === "stale") {
       findings.push(finding(driftLevel(document.criticality), `document-${document.status}`, `${id} is declared ${document.status}.`, document.path));
     }
-    for (const watched of document.watches || []) {
+    // A historical document records past state, such as a dated status report
+    // for people. Changed evidence cannot make it wrong, so it is never suspect.
+    const historical = document.status === "historical" || document.criticality === "historical";
+    for (const watched of historical ? [] : document.watches || []) {
       if (!validateRelativePath(root, watched, findings, "watch-path")) continue;
       const expected = state.fingerprints.documents?.[id]?.[watched];
       const actual = fingerprintPath(root, watched, fingerprintExclusionPatterns(watched), fingerprintOpts);

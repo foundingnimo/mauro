@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Never mark a historical document suspect: the Bearing check ignores its watches.
+- Define a status report: a dated, people-only snapshot recorded as historical.
+- Suggest deleting or correcting a stale non-binding document; code wins for a document that only restates code.
+- Tell the docs mapper to recommend deletion first for a document that only restates code.
+
 - Add `mauro next` (alias `n`, synonym `suggest`): findings and suggested next steps with commands.
 - Keep survey anomalies and unresolved items across `map update`.
 - Keep semantic and human-approved capabilities across `map update`.

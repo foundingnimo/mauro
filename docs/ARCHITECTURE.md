@@ -63,7 +63,12 @@ Document criticality controls the response:
 - A suspect binding document is an error.
 - A suspect operational document is a warning.
 - A suspect informational document is a warning.
-- Historical documents do not claim current truth.
+- Historical documents do not claim current truth. The Bearing check ignores
+  their watches, so changed evidence never makes one suspect. A dated status
+  report for people is a historical document.
+
+A stale document that only restates code is deleted, not corrected. Code wins.
+A document that holds a decision, a rule, or intended state is corrected.
 
 `advise` mode reports warnings without failing a command. `enforce` mode makes
 warnings fail the Bearing check.

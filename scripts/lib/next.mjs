@@ -42,7 +42,7 @@ export function nextSteps(root) {
   const staleBinding = stale.filter((document) => document.criticality === "binding");
   const staleOther = stale.filter((document) => document.criticality !== "binding");
   if (staleOther.length) {
-    suggest("soon", `Update ${staleOther.length} stale or suspect non-binding document${staleOther.length === 1 ? "" : "s"}: ${staleOther.map((document) => document.path).join(", ")}.`, `mauro run ${quote("Update stale documents")}`, "A stale document teaches the wrong model to the next reader.");
+    suggest("soon", `Delete or correct ${staleOther.length} stale or suspect non-binding document${staleOther.length === 1 ? "" : "s"}: ${staleOther.map((document) => document.path).join(", ")}.`, `mauro run ${quote("Delete or correct stale documents")}`, "Code wins. Delete a document that only restates code. Correct a document that holds a decision.");
   }
   if (suspectFindings.length) {
     suggest("soon", `Verify ${suspectFindings.length} item${suspectFindings.length === 1 ? "" : "s"} whose evidence changed.`, "mauro docs check", "Suspect means the evidence moved, not that the text is wrong.");

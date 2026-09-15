@@ -28,9 +28,20 @@ Classify important claims as:
 - Cannot verify
 - No implementation found
 
-Do not assume code is correct and documentation is wrong. Preserve observed
-state and intended state separately. Identify binding, operational,
-informational, and historical documents.
+Do not assume code is correct and documentation is wrong when a document
+records a decision or an intended state. Preserve observed state and intended
+state separately. Identify binding, operational, informational, and historical
+documents.
+
+A document that only restates code is different. Code wins for that document.
+When it contradicts the code, recommend deletion first. Recommend a correction
+only when the document holds a decision, a rule, or intended state.
+
+Classify a status report as historical. A status report is a dated snapshot
+for people. Identify it by a date in its path or name, `kind: status-report`,
+`audience: people`, or an `as_of` field. Do not classify its claims as
+contradicted. Do not suggest watch paths for it. Do not use it as evidence for
+current state.
 
 Provide evidence, confidence, and suggested watch paths. Use ASD-STE100
 Simplified Technical English. Return structured data only in the schema

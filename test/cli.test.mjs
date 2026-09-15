@@ -335,6 +335,29 @@ test("a Bearing check detects changed evidence without changing state", () => {
   assert.match(changed.stdout, /document-suspect/);
 });
 
+test("a historical document is never made suspect by changed evidence", () => {
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  mkdirSync(join(sandbox, "docs/status-reports"), { recursive: true });
+  writeFileSync(join(sandbox, "docs/status-reports/2026-01-01-overview.md"), "# Status report as of 1 January 2026\n");
+  writeFileSync(join(sandbox, "docs/guide.md"), "# Guide\n");
+  const manifestPath = join(sandbox, ".mauro/manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const watches = ["packages/auth/src/token.ts"];
+  manifest.documents["doc-status-report"] = { path: "docs/status-reports/2026-01-01-overview.md", status: "historical", criticality: "historical", watches, knowledge: [] };
+  // Live control: a maintained document watching the same file must still go suspect.
+  manifest.documents["doc-guide"] = { path: "docs/guide.md", status: "current", criticality: "informational", watches, knowledge: [] };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const update = run("map", "update", "--root", sandbox);
+  assert.equal(update.status, 0, update.stderr);
+
+  const source = join(sandbox, "packages/auth/src/token.ts");
+  writeFileSync(source, `${readFileSync(source, "utf8")}\n// changed\n`);
+  const checked = run("check", "--root", sandbox);
+  assert.equal(checked.status, 0, checked.stderr);
+  assert.match(checked.stdout, /doc-guide is suspect because packages\/auth\/src\/token\.ts changed/);
+  assert.doesNotMatch(checked.stdout, /doc-status-report/);
+});
+
 test("enforce mode fails when a record needs review", () => {
   assert.equal(run("init", "--root", sandbox).status, 0);
   const configPath = join(sandbox, ".mauro/config.json");
@@ -609,6 +632,11 @@ test("next lists findings and suggests commands in priority order", () => {
   assert.doesNotMatch(second.stdout, /Write the Charter/);
   assert.match(second.stdout, /1\. \[now\] doc-readme is declared stale\.\n   mauro run "Update README\.md"/);
   assert.match(second.stdout, /\[later\] Propose a Refit for 1 structural finding \(misplaced-shared-code\)\.\n   mauro refit propose/);
+
+  manifest.documents["doc-notes"] = { path: "docs/notes.md", status: "stale", criticality: "informational", watches: [] };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const third = run("next", "--root", sandbox);
+  assert.match(third.stdout, /\[soon\] Delete or correct 1 stale or suspect non-binding document: docs\/notes\.md\.\n   mauro run "Delete or correct stale documents"/);
   const asJson = JSON.parse(run("next", "--json", "--root", sandbox).stdout);
   assert.equal(asJson.suggestions[0].priority, "now");
   assert.equal(asJson.findings.anomalies[0].id, "anomaly-stale-readme");

@@ -51,7 +51,27 @@ move, capability ownership becomes unreliable, or the Map schema changes.
 - `historical`: The document records past state.
 
 Binding documents block completion when suspect or stale. Operational documents
-require review. Informational documents produce warnings.
+require review. Informational documents produce warnings. Historical documents
+are never suspect. The Bearing check ignores their watches.
+
+## Stale documents: code wins
+
+A stale document that only restates code is deleted. Propose deletion first.
+Propose a correction only when the document holds a decision, a rule, or
+intended state, such as `AGENTS.md` or the Charter. After a deletion, repoint
+every reference to the deleted file at the code. Retire its manifest record.
+
+## Status reports
+
+A status report is a dated snapshot of the system for people. It is not
+maintained.
+
+- Put the date in the file name. A new report is a new file.
+- Mark it with `kind: status-report`, `audience: people`, and `as_of`.
+- Add a banner that tells agents not to read it for guidance.
+- Record it with `status` and `criticality` set to `historical` and no watches.
+- A status report can carry counts, because every count is true of its date.
+- Never update an earlier report. Never cite a report in a rule or Navigator.
 
 ## Changes outside Mauro
 
