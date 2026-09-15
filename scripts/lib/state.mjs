@@ -2,7 +2,8 @@ import { readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PATHS, SCHEMA_VERSION } from "./constants.mjs";
-import { copyTextIfMissing, ensureDir, exists, fingerprintPath, readJson, repoPath, sha256Buffer, writeJson, writeText } from "./fs.mjs";
+import { copyTextIfMissing, ensureDir, exists, fingerprintPath, readJson, repoPath, sha256Buffer, watchPathspec, writeJson, writeText } from "./fs.mjs";
+import { gitChangedPaths, gitHead } from "./git.mjs";
 import { scanRepository } from "./inventory.mjs";
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions, validateConfig } from "./policy.mjs";
 import { navigatorIdentity, renderClaudeAgent, renderClaudeRule, renderMap, renderNavigatorBrief, slug } from "./render.mjs";
@@ -27,6 +28,37 @@ function template(pluginRoot, name) {
 
 function makeDocument(path, criticality, watches, knowledge = []) {
   return { path, status: "current", criticality, watches, knowledge };
+}
+
+export const VERIFICATION_FIELDS = Object.freeze(["verified_commit", "verified_at", "verified_dirty", "verified_evidence"]);
+
+// Read once per operation: a map update stamps many documents from one HEAD.
+export function verificationContext(root) {
+  return { commit: gitHead(root), changed: gitChangedPaths(root) };
+}
+
+// The commit a document's fingerprints describe. A fingerprint says only that a
+// watched path changed; a review diffs from this commit to see what changed.
+// `verified_dirty` warns that the diff can include edits that were already
+// there when the fingerprint was taken.
+export function verificationStamp(watches = [], context) {
+  const specs = watches.map(watchPathspec);
+  const touches = (path) => {
+    const changed = path.replace(/\/$/, "");
+    return specs.some((spec) => spec === "." || changed === spec || changed.startsWith(`${spec}/`) || spec.startsWith(`${changed}/`));
+  };
+  return {
+    verified_commit: context.commit || null,
+    verified_at: new Date().toISOString(),
+    verified_dirty: Boolean(context.commit) && context.changed.some(touches),
+    verified_evidence: null
+  };
+}
+
+function carryVerification(target, previous) {
+  for (const field of VERIFICATION_FIELDS) {
+    if (previous && previous[field] !== undefined) target[field] = previous[field];
+  }
 }
 
 function removeGeneratedView(root, path, prefix, requiredNamePrefix = "") {
@@ -115,6 +147,7 @@ export function initialize(root, pluginRoot) {
   if (isInitialized(root)) {
     throw new Error("Mauro is already initialized. Use `mauro map update`.");
   }
+  const context = verificationContext(root);
   const configPath = repoPath(root, PATHS.config);
   const config = validateConfig(exists(configPath) ? readJson(configPath) : readJson(template(pluginRoot, "config.json")));
   const map = scanRepository(root, config);
@@ -125,6 +158,7 @@ export function initialize(root, pluginRoot) {
   copyTextIfMissing(template(pluginRoot, "charter.md"), repoPath(root, PATHS.charter));
   writeJson(repoPath(root, PATHS.map), map);
   const manifest = rebuildViews(root, map);
+  for (const document of Object.values(manifest.documents)) Object.assign(document, verificationStamp(document.watches, context));
   writeJson(repoPath(root, PATHS.manifest), manifest);
   const fingerprints = buildFingerprints(root, manifest, config, map);
   writeJson(repoPath(root, PATHS.fingerprints), fingerprints);
@@ -176,6 +210,7 @@ export function mergeCapabilities(previousCapabilities, scannedCapabilities, uni
 
 export function updateMap(root) {
   const current = loadState(root);
+  const context = verificationContext(root);
   const scanned = scanRepository(root, current.config);
   const oldUnits = new Set(current.map.units.map((unit) => unit.id));
   const newUnits = new Set(scanned.units.map((unit) => unit.id));
@@ -198,18 +233,24 @@ export function updateMap(root) {
   };
   writeJson(repoPath(root, PATHS.map), map);
   const manifest = rebuildViews(root, map, current.manifest);
-  writeJson(repoPath(root, PATHS.manifest), manifest);
   const fresh = buildFingerprints(root, manifest, current.config, map);
   const policyChanged = current.fingerprints.config_digest !== fresh.config_digest;
+  // A document keeps its fingerprint, and the commit that fingerprint describes,
+  // until something re-verifies it. Only a new, regenerated or re-scoped view is
+  // fingerprinted afresh, so only that view gets a new stamp.
+  const refingerprinted = (id) => id === "doc-map" || !current.fingerprints.documents[id] || (policyChanged && id.startsWith("navigator-"));
+  for (const [id, document] of Object.entries(manifest.documents)) {
+    if (refingerprinted(id)) Object.assign(document, verificationStamp(document.watches, context));
+    else carryVerification(document, current.manifest.documents?.[id]);
+  }
+  writeJson(repoPath(root, PATHS.manifest), manifest);
   const fingerprints = {
     schema_version: SCHEMA_VERSION,
     config_digest: fresh.config_digest,
     records: current.fingerprints.records,
     documents: Object.fromEntries(Object.keys(manifest.documents).map((id) => [
       id,
-      id === "doc-map" || !current.fingerprints.documents[id] || (policyChanged && id.startsWith("navigator-"))
-        ? fresh.documents[id]
-        : current.fingerprints.documents[id]
+      refingerprinted(id) ? fresh.documents[id] : current.fingerprints.documents[id]
     ]))
   };
   writeJson(repoPath(root, PATHS.fingerprints), fingerprints);

@@ -226,6 +226,17 @@ export function fingerprintPath(root, rel, excludes = [], options = {}) {
   return `sha256:${hash.digest("hex")}`;
 }
 
+// A watch can be a file, a directory, a `dir/**` scope or a glob. Git wants a
+// pathspec, so reduce the watch exactly as fingerprintPath reduces it: a glob
+// widens to the directory above its first wildcard.
+export function watchPathspec(watch) {
+  if (watch === "**" || watch === ".") return ".";
+  let path = watch.endsWith("/**") ? watch.slice(0, -3) : watch;
+  const glob = path.search(/[*?]/);
+  if (glob !== -1) path = path.slice(0, glob);
+  return path.replace(/\/$/, "") || ".";
+}
+
 export function relativeFrom(root, absolute) {
   return toPosix(relative(root, absolute));
 }
