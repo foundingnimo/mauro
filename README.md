@@ -25,6 +25,7 @@ Version 0.1 is a working minimum viable release:
 - Pointer and fingerprint Bearing checks
 - Command help and stable aliases
 - A registered read-only Node.js Toolbox for recurring repository analysis
+- Document review: Mauro re-checks a document whose evidence changed
 - Claude Code agents, hooks, and workflow instructions
 
 Semantic capability mapping, context curation, and Refit proposals are
@@ -137,6 +138,28 @@ start only the subprocesses that it declares; the documentation index declares
 Git because its Bearing check inspects ignore rules. Results are bounded to
 protect the Claude context window.
 
+## Document review
+
+A fingerprint says that a watched path changed. It does not say whether the
+document is now wrong. Mauro records the commit that the fingerprints of each
+document describe, so it can show what changed and let a review decide:
+
+```text
+mauro docs review            # one packet per suspect document
+mauro docs review --json     # the packets an agent reads
+mauro docs confirm <id> --evidence docs/mauro/chronicles/reviews/<file>.md
+```
+
+A packet holds the diff since the verification commit, the commit subjects, and
+the untracked files in the watched paths. Without a usable commit, the packet
+asks for a full review of the document against the current code. The
+`mauro-docs-reviewer` agent verifies each affected claim and returns `holds`,
+`needs-change`, or `unsure`. The skill records every verdict in a Chronicle
+file. `confirm` then refreshes the fingerprints and records HEAD. It refuses
+without that Chronicle file. A binding document needs two independent `holds`
+verdicts. A historical document, such as a dated status report, is never
+reviewed.
+
 ## Project files
 
 Mauro creates these files inside a target repository:
@@ -151,6 +174,7 @@ docs/mauro/map.md           human-readable observed structure
 .mauro/config.json          repository scan and operating policy
 .mauro/manifest.json        knowledge and documentation index
 .mauro/fingerprints.json    freshness evidence
+docs/mauro/chronicles/reviews/  document review verdicts and evidence
 .claude/rules/mauro/        generated path-scoped knowledge
 .claude/agents/                generated project Navigators
 ```
