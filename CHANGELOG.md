@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1 (2026-09-15)
+
 - Add a registered, read-only Node.js Toolbox with structured discovery and execution.
 - Tell Mauro and its agents to prefer registered tools over generated helper scripts.
 
