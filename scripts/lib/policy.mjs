@@ -1,7 +1,8 @@
 import { realpathSync } from "node:fs";
 import { extname, relative } from "node:path";
 import { DEFAULT_FIXTURE_PATTERNS, DEFAULT_GENERATED_PATTERNS, DEFAULT_TEST_PATTERNS, STRUCTURAL_NAMES } from "./constants.mjs";
-import { fileName, matchesGlob, toPosix } from "./fs.mjs";
+import { exclusionMatch, fileName, matchesGlob, toPosix } from "./fs.mjs";
+import { gitIgnoredRegions } from "./git.mjs";
 
 const LANGUAGE_BY_EXTENSION = new Map([
   [".ts", "TypeScript"], [".tsx", "TypeScript"], [".js", "JavaScript"],
@@ -18,6 +19,7 @@ const DOCUMENT_EXTENSIONS = new Set([".md", ".mdx", ".rst", ".adoc"]);
 const ROLE_MODES = new Set(["full", "evidence", "exclude"]);
 const DOCUMENT_MODES = new Set(["full", "selected", "exclude"]);
 const MAURO_MODES = new Set(["observe", "advise", "maintain", "enforce"]);
+const GITIGNORED_MODES = new Set(["record", "scan"]);
 
 function invalid(message) {
   throw new Error(`Invalid Mauro config: ${message}`);
@@ -59,7 +61,7 @@ export function validateConfig(config) {
   if (root.schema_version !== 1) invalid("schema_version must be 1.");
   if (!MAURO_MODES.has(root.mode)) invalid("mode must be observe, advise, maintain, or enforce.");
   const scan = objectAt(root.scan, "scan");
-  keysAt(scan, ["packages", "package_overrides", "tests", "fixtures", "generated", "documents", "paths", "languages", "max_file_size", "follow_symlinks", "full_expedition_move_threshold"], "scan");
+  keysAt(scan, ["packages", "package_overrides", "tests", "fixtures", "generated", "documents", "gitignored", "paths", "languages", "max_file_size", "follow_symlinks", "full_expedition_move_threshold"], "scan");
   const packages = objectAt(scan.packages, "scan.packages");
   keysAt(packages, ["include", "exclude", "excluded_behavior"], "scan.packages");
   selectorAt(packages.include, "scan.packages.include");
@@ -81,6 +83,14 @@ export function validateConfig(config) {
   if (!DOCUMENT_MODES.has(documents.mode)) invalid("scan.documents.mode must be full, selected, or exclude.");
   stringArrayAt(documents.include, "scan.documents.include");
   stringArrayAt(documents.exclude, "scan.documents.exclude");
+  if (scan.gitignored !== undefined) {
+    const gitignored = objectAt(scan.gitignored, "scan.gitignored");
+    keysAt(gitignored, ["default", "include", "exclude", "hide"], "scan.gitignored");
+    if (!GITIGNORED_MODES.has(gitignored.default)) invalid("scan.gitignored.default must be record or scan.");
+    stringArrayAt(gitignored.include, "scan.gitignored.include");
+    stringArrayAt(gitignored.exclude, "scan.gitignored.exclude");
+    stringArrayAt(gitignored.hide, "scan.gitignored.hide");
+  }
   const paths = objectAt(scan.paths, "scan.paths");
   keysAt(paths, ["exclude"], "scan.paths");
   stringArrayAt(paths.exclude, "scan.paths.exclude");
@@ -108,6 +118,78 @@ function patterns(config, key, defaults) {
 
 export function matchesAny(path, candidates = []) {
   return candidates.some((pattern) => matchesGlob(pattern, path) || (!pattern.includes("/") && matchesGlob(pattern, fileName(path))));
+}
+
+function normalizePolicyPath(path) {
+  return toPosix(path).replace(/^\.\//, "").replace(/\/$/, "");
+}
+
+function ignoredRegionForPath(path, regionIndex) {
+  let cursor = normalizePolicyPath(path);
+  while (cursor) {
+    if (regionIndex.has(cursor)) return regionIndex.get(cursor);
+    const separator = cursor.lastIndexOf("/");
+    if (separator === -1) break;
+    cursor = cursor.slice(0, separator);
+  }
+  return null;
+}
+
+function patternCouldReachRegion(pattern, region) {
+  const normalized = normalizePolicyPath(pattern);
+  if (!normalized.includes("/")) return true;
+  const prefix = normalized.split(/[*?]/)[0].replace(/\/$/, "");
+  if (!prefix) return true;
+  return prefix === region || prefix.startsWith(`${region}/`) || region.startsWith(`${prefix}/`);
+}
+
+export function gitignoredDecision(path, config) {
+  const settings = config.scan?.gitignored || {};
+  if (matchesAny(path, settings.hide || [])) return { treatment: "hide", source: "hide" };
+  if (matchesAny(path, settings.include || [])) return { treatment: "scan", source: "include" };
+  if (matchesAny(path, settings.exclude || [])) return { treatment: "record", source: "exclude" };
+  return { treatment: settings.default || "record", source: "default" };
+}
+
+export function gitignoredTreatment(path, config) {
+  return gitignoredDecision(path, config).treatment;
+}
+
+export function createGitignoredPolicy(root, config) {
+  const regions = gitIgnoredRegions(root)
+    .map((region) => ({ ...region, path: normalizePolicyPath(region.path) }))
+    .filter((region) => region.path)
+    .sort((a, b) => a.path.localeCompare(b.path));
+  const regionIndex = new Map(regions.map((region) => [region.path, region]));
+  const include = config.scan?.gitignored?.include || [];
+  const walkExcludes = [];
+  for (const region of regions) {
+    const probe = region.kind === "directory" ? `${region.path}/__mauro_boundary__` : region.path;
+    const treatment = gitignoredTreatment(probe, config);
+    const reachable = include.some((pattern) => patternCouldReachRegion(pattern, region.path));
+    if (treatment === "hide" || (treatment === "record" && !reachable)) {
+      walkExcludes.push(region.kind === "directory" ? `${region.path}/**` : region.path);
+    }
+  }
+  return {
+    regions,
+    walkExcludes,
+    regionForPath(path) {
+      return ignoredRegionForPath(path, regionIndex);
+    },
+    treatmentForPath(path) {
+      return gitignoredTreatment(path, config);
+    },
+    decisionForPath(path) {
+      return gitignoredDecision(path, config);
+    },
+    accepts(path) {
+      return !ignoredRegionForPath(path, regionIndex) || gitignoredTreatment(path, config) === "scan";
+    },
+    isHardHidden(path) {
+      return exclusionMatch(path)?.source === "hard";
+    }
+  };
 }
 
 export function languageForPath(path) {
@@ -213,10 +295,11 @@ function omittedPath(path, map) {
   return omittedLength >= visibleLength;
 }
 
-export function fingerprintOptions(config, map, root) {
+export function fingerprintOptions(config, map, root, ignoredPolicy = createGitignoredPolicy(root, config)) {
   return {
     ...scannerOptions(config),
     acceptFile(path, absolute) {
+      if (!ignoredPolicy.accepts(path)) return false;
       const owner = mapOwner(path, map);
       if (owner?.scope === "stub" && !(owner.manifests || [owner.manifest]).filter(Boolean).includes(path)) return false;
       let physicalPath = path;
@@ -225,6 +308,7 @@ export function fingerprintOptions(config, map, root) {
       } catch {
         return false;
       }
+      if (!ignoredPolicy.accepts(physicalPath)) return false;
       if (omittedPath(physicalPath, map)) return false;
       const physicalOwner = physicalPath === path ? owner : mapOwner(physicalPath, map);
       if (physicalOwner?.scope === "stub" && !(physicalOwner.manifests || [physicalOwner.manifest]).filter(Boolean).includes(physicalPath)) return false;
@@ -238,7 +322,7 @@ export function fingerprintOptions(config, map, root) {
   };
 }
 
-export function fingerprintExcludes(config, map, watched = ".") {
-  const excludes = [...walkExcludes(config)];
+export function fingerprintExcludes(config, map, watched = ".", ignoredPolicy = null) {
+  const excludes = [...walkExcludes(config), ...(ignoredPolicy?.walkExcludes || [])];
   return [...new Set(excludes)];
 }

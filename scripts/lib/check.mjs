@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
 import { MAURO_VERSION, PATHS, SCHEMA_VERSION } from "./constants.mjs";
 import { exists, fingerprintPath, repoPath, walkFiles } from "./fs.mjs";
-import { fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
+import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
 import { loadState } from "./state.mjs";
 
 const TEXT_EXTENSIONS = new Set([
@@ -32,6 +32,9 @@ function validateRelativePath(root, path, findings, code) {
 export function checkRepository(root) {
   const state = loadState(root);
   const findings = [];
+  const ignoredPolicy = createGitignoredPolicy(root, state.config);
+  const fingerprintOpts = fingerprintOptions(state.config, state.map, root, ignoredPolicy);
+  const fingerprintExclusionPatterns = (watched = ".") => fingerprintExcludes(state.config, state.map, watched, ignoredPolicy);
   if (state.map.schema_version !== SCHEMA_VERSION) {
     findings.push(finding("error", "map-schema", `Map schema ${state.map.schema_version} is not supported.`));
   }
@@ -58,7 +61,7 @@ export function checkRepository(root) {
     for (const watched of document.watches || []) {
       if (!validateRelativePath(root, watched, findings, "watch-path")) continue;
       const expected = state.fingerprints.documents?.[id]?.[watched];
-      const actual = fingerprintPath(root, watched, fingerprintExcludes(state.config, state.map, watched), fingerprintOptions(state.config, state.map, root));
+      const actual = fingerprintPath(root, watched, fingerprintExclusionPatterns(watched), fingerprintOpts);
       if (!expected) {
         findings.push(finding("warning", "fingerprint-missing", `${id} has no fingerprint for ${watched}.`, document.path));
       } else if (actual !== expected) {
@@ -78,7 +81,7 @@ export function checkRepository(root) {
     for (const watched of record.paths || []) {
       if (!validateRelativePath(root, watched, findings, "knowledge-watch")) continue;
       const expected = state.fingerprints.records?.[id]?.[watched];
-      const actual = fingerprintPath(root, watched, fingerprintExcludes(state.config, state.map, watched), fingerprintOptions(state.config, state.map, root));
+      const actual = fingerprintPath(root, watched, fingerprintExclusionPatterns(watched), fingerprintOpts);
       if (!expected || actual !== expected) {
         const level = record.status === "active" ? "warning" : "information";
         findings.push(finding(level, "knowledge-suspect", `${id} needs verification because ${watched} changed.`, record.source));
@@ -103,7 +106,7 @@ export function checkRepository(root) {
   }
 
   const known = new Set(Object.entries(state.manifest.knowledge || {}).filter(([, record]) => record.status === "active").map(([id]) => id));
-  for (const path of walkFiles(root, fingerprintExcludes(state.config, state.map), fingerprintOptions(state.config, state.map, root))) {
+  for (const path of walkFiles(root, fingerprintExclusionPatterns(), fingerprintOpts)) {
     if (!TEXT_EXTENSIONS.has(extname(path).toLowerCase())) continue;
     const absolute = repoPath(root, path);
     let text;

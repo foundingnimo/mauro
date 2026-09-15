@@ -1,10 +1,11 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
-import { MAURO_VERSION, MANIFEST_FILES, SCHEMA_VERSION } from "./constants.mjs";
+import { MAURO_VERSION, MANIFEST_FILES, MAX_PERIMETER_REGIONS, SCHEMA_VERSION } from "./constants.mjs";
 import { fileName, fingerprintFile, repoPath, toPosix, walkFiles } from "./fs.mjs";
 import { gitBaseline } from "./git.mjs";
 import {
   documentAllowed,
+  createGitignoredPolicy,
   effectiveMode,
   isDocumentPath,
   languageAllowed,
@@ -15,6 +16,23 @@ import {
   validateConfig,
   walkExcludes
 } from "./policy.mjs";
+
+const REVIEWABLE_IGNORED_PATH = /(^|\/)(adr|architecture|design|docs?|examples?|infra|schemas?|stories|storybook)(\/|$)/i;
+
+function boundaryClassification(path, kind, config) {
+  const probe = kind === "directory" ? `${path}/__mauro_boundary__` : path;
+  const role = roleForPath(probe, config);
+  if (role !== "source") return role;
+  if (isDocumentPath(probe)) return "document";
+  return "unknown";
+}
+
+function policyReason(classification) {
+  if (classification === "generated") return "generated-policy";
+  if (classification === "fixture") return "fixture-policy";
+  if (classification === "test") return "test-policy";
+  return "path-policy";
+}
 
 function manifestKind(name) {
   if (name.endsWith(".csproj")) return "dotnet";
@@ -112,7 +130,97 @@ function publicUnit(unit) {
 
 export function scanRepository(root, config = {}) {
   validateConfig(config);
-  const candidatePaths = walkFiles(root, walkExcludes(config), scannerOptions(config));
+  const ignoredPolicy = createGitignoredPolicy(root, config);
+  const perimeterByPath = new Map();
+  let hiddenIgnoredRegions = 0;
+  const addPerimeter = ({ path, kind, treatment = "record", classification, reason, pattern = null }) => {
+    const current = perimeterByPath.get(path) || {
+      path,
+      kind,
+      treatment,
+      classification,
+      reasons: new Set(),
+      patterns: new Set(),
+      review_required: false
+    };
+    current.treatment = current.treatment === "partial" || treatment === "partial" ? "partial" : treatment;
+    current.classification = current.classification === "unknown" ? classification : current.classification;
+    current.reasons.add(reason);
+    if (pattern) current.patterns.add(pattern);
+    current.review_required ||= reason === "gitignored" && (classification === "document" || REVIEWABLE_IGNORED_PATH.test(path));
+    perimeterByPath.set(path, current);
+  };
+  const ignoredReason = (path) => ignoredPolicy.decisionForPath(path).source === "default"
+    ? "gitignored"
+    : "gitignored-policy";
+  const recordFilteredFile = (path, kind, classification, reason, pattern = null) => {
+    addPerimeter({ path, kind, classification, reason, pattern });
+    if (ignoredPolicy.regionForPath(path)) {
+      addPerimeter({ path, kind, classification, reason: ignoredReason(path) });
+    }
+  };
+
+  const ignoredWalkExcludes = new Set(ignoredPolicy.walkExcludes);
+  for (const region of ignoredPolicy.regions) {
+    const probe = region.kind === "directory" ? `${region.path}/__mauro_boundary__` : region.path;
+    const decision = ignoredPolicy.decisionForPath(probe);
+    const treatment = decision.treatment;
+    if (ignoredPolicy.isHardHidden(region.path) || treatment === "hide") {
+      hiddenIgnoredRegions += 1;
+      continue;
+    }
+    if (treatment === "scan") continue;
+    const exclusion = region.kind === "directory" ? `${region.path}/**` : region.path;
+    addPerimeter({
+      ...region,
+      treatment: ignoredWalkExcludes.has(exclusion) ? "record" : "partial",
+      classification: boundaryClassification(region.path, region.kind, config),
+      reason: decision.source === "exclude" ? "gitignored-policy" : "gitignored"
+    });
+  }
+
+  const candidatePaths = walkFiles(
+    root,
+    [...walkExcludes(config), ...ignoredPolicy.walkExcludes],
+    {
+      ...scannerOptions(config),
+      acceptFile(path, absolute) {
+        if (!ignoredPolicy.accepts(path)) return false;
+        try {
+          return ignoredPolicy.accepts(toPosix(relative(root, realpathSync(absolute))));
+        } catch {
+          return false;
+        }
+      },
+      onExcluded(event) {
+        if (event.source === "hard") return;
+        const probe = event.kind === "directory" ? `${event.path}/__mauro_boundary__` : event.path;
+        const ignoredDecision = ignoredPolicy.decisionForPath(probe);
+        if (ignoredPolicy.regionForPath(event.path) && ignoredDecision.treatment === "hide") return;
+        const classification = boundaryClassification(event.path, event.kind, config);
+        const ignoredRule = ignoredWalkExcludes.has(event.pattern);
+        if (!ignoredRule || ["generated", "fixture", "test"].includes(classification)) {
+          addPerimeter({ ...event, classification, reason: policyReason(classification) });
+        }
+        if (ignoredPolicy.regionForPath(event.path)) {
+          addPerimeter({ ...event, classification, reason: ignoredReason(probe) });
+        }
+      },
+      onRejected(event) {
+        if (!ignoredPolicy.regionForPath(event.path)) return;
+        const decision = ignoredPolicy.decisionForPath(event.path);
+        if (decision.treatment === "hide") {
+          hiddenIgnoredRegions += 1;
+          return;
+        }
+        addPerimeter({
+          ...event,
+          classification: boundaryClassification(event.path, event.kind, config),
+          reason: decision.source === "exclude" ? "gitignored-policy" : "gitignored"
+        });
+      }
+    }
+  );
   let allUnits = groupedManifestUnits(root, candidatePaths, config);
   if (allUnits.length === 0) allUnits = fallbackUnits(candidatePaths, config);
   const visibleUnits = allUnits.filter((unit) => unit.scope !== "omit");
@@ -125,6 +233,7 @@ export function scanRepository(root, config = {}) {
     const absolute = repoPath(root, path);
     const physicalPath = toPosix(relative(root, realpathSync(absolute)));
     const viaSymlink = physicalPath !== path;
+    const boundaryKind = viaSymlink ? "symlink" : "file";
     const physicalOwner = viaSymlink ? ownerFor(physicalPath, allUnits) : owner;
     if (owner?.scope === "omit") continue;
     if (owner?.scope === "stub" && !owner.manifests.includes(path)) continue;
@@ -132,12 +241,27 @@ export function scanRepository(root, config = {}) {
     if (physicalOwner?.scope === "stub" && !physicalOwner.manifests.includes(physicalPath)) continue;
     const role = roleForPath(path, config);
     const scanMode = effectiveMode(role, owner, config);
-    if (scanMode === "exclude") continue;
-    if (physicalOwner !== owner && effectiveMode(role, physicalOwner, config) === "exclude") continue;
-    if (!documentAllowed(path, owner, config)) continue;
-    if (physicalOwner !== owner && !documentAllowed(physicalPath, physicalOwner, config)) continue;
+    if (scanMode === "exclude") {
+      recordFilteredFile(path, boundaryKind, role, policyReason(role));
+      continue;
+    }
+    if (physicalOwner !== owner && effectiveMode(role, physicalOwner, config) === "exclude") {
+      recordFilteredFile(path, boundaryKind, role, policyReason(role));
+      continue;
+    }
+    if (!documentAllowed(path, owner, config)) {
+      recordFilteredFile(path, boundaryKind, "document", "document-policy");
+      continue;
+    }
+    if (physicalOwner !== owner && !documentAllowed(physicalPath, physicalOwner, config)) {
+      recordFilteredFile(path, boundaryKind, "document", "document-policy");
+      continue;
+    }
     const language = languageForPath(path);
-    if (!languageAllowed(language, path, config)) continue;
+    if (!languageAllowed(language, path, config)) {
+      recordFilteredFile(path, boundaryKind, boundaryClassification(path, "file", config), "language-policy");
+      continue;
+    }
     const size = statSync(absolute).size;
     const oversize = size > maxFileSize;
     files.push({
@@ -150,7 +274,8 @@ export function scanRepository(root, config = {}) {
       physical_owner: physicalOwner?.id || null,
       digest: oversize ? null : fingerprintFile(absolute),
       oversize,
-      via_symlink: viaSymlink
+      via_symlink: viaSymlink,
+      gitignored: Boolean(ignoredPolicy.regionForPath(path))
     });
     roleCounts[role] += 1;
   }
@@ -207,7 +332,7 @@ export function scanRepository(root, config = {}) {
 
   const documents = files
     .filter((file) => isDocumentPath(file.path))
-    .map((file) => ({ path: file.path, digest: file.digest, role: file.role }));
+    .map((file) => ({ path: file.path, digest: file.digest, role: file.role, gitignored: file.gitignored }));
 
   const anomalies = [];
   if (duplicateGroups.length) {
@@ -219,6 +344,16 @@ export function scanRepository(root, config = {}) {
   }
 
   const omittedUnitRoots = allUnits.filter((unit) => unit.scope === "omit").map((unit) => unit.root);
+  const allPerimeterRegions = [...perimeterByPath.values()]
+    .map((region) => ({
+      ...region,
+      reasons: [...region.reasons].sort(),
+      patterns: [...region.patterns].sort()
+    }))
+    .sort((a, b) => Number(b.review_required) - Number(a.review_required) || a.path.localeCompare(b.path));
+  const perimeterRegions = allPerimeterRegions.slice(0, MAX_PERIMETER_REGIONS);
+  const reviewRequiredRegions = allPerimeterRegions.filter((region) => region.review_required);
+  const gitignoredScannedFiles = files.filter((file) => file.gitignored).length;
   return {
     schema_version: SCHEMA_VERSION,
     mauro_version: MAURO_VERSION,
@@ -232,8 +367,16 @@ export function scanRepository(root, config = {}) {
       included_units: visibleUnits.filter((unit) => unit.scope === "included").length,
       stub_units: visibleUnits.filter((unit) => unit.scope === "stub").length,
       omitted_units: omittedUnitRoots.length,
-      omitted_unit_roots: omittedUnitRoots
+      omitted_unit_roots: omittedUnitRoots,
+      perimeter_regions: allPerimeterRegions.length,
+      perimeter_regions_listed: perimeterRegions.length,
+      perimeter_truncated: allPerimeterRegions.length > perimeterRegions.length,
+      gitignored_regions: ignoredPolicy.regions.length,
+      gitignored_scanned_files: gitignoredScannedFiles,
+      hidden_ignored_regions: hiddenIgnoredRegions,
+      review_required_regions: reviewRequiredRegions.length
     },
+    perimeter_regions: perimeterRegions,
     files,
     units,
     capabilities,
@@ -241,10 +384,17 @@ export function scanRepository(root, config = {}) {
     documents,
     duplicate_groups: duplicateGroups,
     anomalies,
-    unresolved: capabilities.filter((item) => item.confidence < 0.5).map((item) => ({
-      kind: "low-confidence-capability",
-      capability: item.id,
-      evidence: item.evidence
-    }))
+    unresolved: [
+      ...capabilities.filter((item) => item.confidence < 0.5).map((item) => ({
+        kind: "low-confidence-capability",
+        capability: item.id,
+        evidence: item.evidence
+      })),
+      ...perimeterRegions.filter((region) => region.review_required).map((region) => ({
+        kind: "ignored-region-needs-scan-decision",
+        path: region.path,
+        evidence: [region.path]
+      }))
+    ]
   };
 }

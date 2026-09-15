@@ -15,6 +15,27 @@ package.
 
 Do not open a stub or omitted package to gain more context.
 
+## Perimeter and Git-ignored paths
+
+The inventory contains `perimeter_regions`. These are known boundaries, not
+content evidence. Do not enumerate or open a region whose treatment is
+`record` or `partial`.
+
+Git-ignored content is `record` by default. Configure `scan.gitignored` with:
+
+- `default`: `record` or `scan`.
+- `include`: Permit selected ignored paths to enter the content scan.
+- `exclude`: Keep selected ignored paths record-only and mark the decision as intentional.
+- `hide`: Do not disclose selected paths in the Map.
+
+Precedence is `hide`, `include`, `exclude`, then `default`. Hard safety
+exclusions always win. An `include` only crosses the Git-ignored boundary. The
+package, role, document, path, language, size, and symlink rules still apply.
+Ask for a human decision when an ignored documentation or design region has
+`review_required: true`.
+The addition or removal of a perimeter region makes the Map suspect. A content
+change inside an existing record-only region does not.
+
 ## File roles
 
 Tests, fixtures, and generated files have one of these modes:

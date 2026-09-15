@@ -50,21 +50,36 @@ define a capability or create duplication and Refit findings. Package overrides
 take precedence over the global role mode. A configured pattern array replaces
 the default array.
 
+Git-ignored paths use a separate policy. `record` is the default: Mauro records
+the region boundary but does not enumerate or read its contents. `scan` permits
+content inspection, subject to all other scan policies. The `include` list
+selects ignored paths for scanning. The `exclude` list keeps selected paths
+record-only and resolves the scan decision. The `hide` list prevents path
+disclosure. Precedence within this
+policy is `hide`, `include`, `exclude`, then `default`. Non-configurable safety
+exclusions always win.
+
 Mauro applies scan policy in this order:
 
-1. Non-configurable safety exclusions block Git data, Mauro state, generated
+1. A lightweight perimeter census identifies excluded and Git-ignored regions.
+   It does not read record-only contents.
+2. Non-configurable safety exclusions block Git data, Mauro state, generated
    Claude views, dependencies, common secret files, keys, and logs.
-2. Package include and exclude selectors set unit scope.
-3. Package overrides and global role modes set file treatment.
-4. Document selection, path exclusions, and language filters reduce the result.
-5. The maximum file size prevents content hashing and semantic inspection.
+3. Git-ignored policy decides whether ignored content stays record-only or can
+   enter the content scan.
+4. Package include and exclude selectors set unit scope.
+5. Package overrides and global role modes set file treatment.
+6. Document selection, path exclusions, and language filters reduce the result.
+7. The maximum file size prevents content hashing and semantic inspection.
 
 Structural manifests remain visible through a language filter. Symlink following
 is off by default. When it is on, Mauro follows only targets inside the repository.
 A symlink cannot bypass a configured or safety exclusion. Mauro marks files that
 were reached through symlinks and excludes those aliases from duplicate analysis.
 
-A scan-policy change updates fingerprints for generated Navigator views. Active
+A perimeter-boundary, `.gitignore`, or scan-policy change makes repository-level
+generated knowledge suspect. Content-only changes inside a record-only region do
+not. A Map update updates fingerprints for generated Navigator views. Active
 human knowledge keeps its previous verification baseline until a verifier checks
 the new evidence scope.
 

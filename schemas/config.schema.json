@@ -63,6 +63,17 @@
             "exclude": { "$ref": "#/$defs/patterns" }
           }
         },
+        "gitignored": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default", "include", "exclude", "hide"],
+          "properties": {
+            "default": { "enum": ["record", "scan"] },
+            "include": { "$ref": "#/$defs/patterns" },
+            "exclude": { "$ref": "#/$defs/patterns" },
+            "hide": { "$ref": "#/$defs/patterns" }
+          }
+        },
         "paths": {
           "type": "object",
           "additionalProperties": false,

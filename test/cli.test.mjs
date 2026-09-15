@@ -18,6 +18,10 @@ function run(...args) {
   });
 }
 
+function git(...args) {
+  return spawnSync("git", args, { cwd: sandbox, encoding: "utf8" });
+}
+
 function readMap() {
   return JSON.parse(readFileSync(join(sandbox, ".mauro/map.json"), "utf8"));
 }
@@ -48,12 +52,121 @@ test("init maps a monorepo and generates scoped Navigators", () => {
   assert.equal(map.files.find((file) => file.path.endsWith("index.test.ts")).role, "test");
   assert.equal(map.files.find((file) => file.path.endsWith("account.json")).role, "fixture");
   assert.equal(map.files.some((file) => file.path.includes("/dist/")), false);
+  const generatedBoundary = map.perimeter_regions.find((region) => region.path === "apps/web/dist");
+  assert.equal(generatedBoundary.classification, "generated");
+  assert.deepEqual(generatedBoundary.reasons, ["generated-policy"]);
   assert.equal(Object.keys(manifest.navigators).length, 3);
   for (const navigator of Object.values(manifest.navigators)) {
     assert.match(navigator.generated_agent, /^\.claude\/agents\//);
     assert.ok(readFileSync(join(sandbox, navigator.generated_agent), "utf8").includes("Generated"));
   }
   assert.ok(readFileSync(join(sandbox, "docs/mauro/charter.md"), "utf8").includes("# Mauro Charter"));
+});
+
+test("init records ignored boundaries without reading their contents", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  mkdirSync(join(sandbox, "build"));
+  mkdirSync(join(sandbox, "docs/private"), { recursive: true });
+  writeFileSync(join(sandbox, "build/output.js"), "throw new Error('must not be scanned');\n");
+  writeFileSync(join(sandbox, "docs/private/architecture.md"), "# Private architecture\n");
+  writeFileSync(join(sandbox, ".env"), "SECRET=do-not-index\n");
+  writeFileSync(join(sandbox, ".gitignore"), "build/\ndocs/private/\nprivate-notes/\n.env\n");
+
+  const result = run("init", "--root", sandbox, "--json");
+  assert.equal(result.status, 0, result.stderr);
+  const map = readMap();
+  assert.equal(map.files.some((file) => file.path.startsWith("build/")), false);
+  assert.equal(map.files.some((file) => file.path.startsWith("docs/private/")), false);
+  assert.equal(map.perimeter_regions.some((region) => region.path === ".env"), false);
+  assert.ok(map.scan_summary.hidden_ignored_regions >= 1);
+  const build = map.perimeter_regions.find((region) => region.path === "build");
+  assert.equal(build.classification, "generated");
+  assert.ok(build.reasons.includes("gitignored"));
+  assert.ok(build.reasons.includes("generated-policy"));
+  const docs = map.perimeter_regions.find((region) => region.path === "docs/private");
+  assert.equal(docs.classification, "document");
+  assert.equal(docs.review_required, true);
+  assert.ok(map.unresolved.some((item) => item.kind === "ignored-region-needs-scan-decision" && item.path === "docs/private"));
+
+  writeFileSync(join(sandbox, "build/output.js"), "changed generated output\n");
+  writeFileSync(join(sandbox, "docs/private/architecture.md"), "# Changed private architecture\n");
+  assert.match(run("check", "--root", sandbox).stdout, /Bearing check: PASS/);
+
+  mkdirSync(join(sandbox, "private-notes"));
+  writeFileSync(join(sandbox, "private-notes/new.md"), "# New ignored boundary\n");
+  assert.match(run("check", "--root", sandbox).stdout, /Bearing check: REVIEW/);
+});
+
+test("an explicit ignored-doc include makes the document evidence", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  mkdirSync(join(sandbox, "docs/private"), { recursive: true });
+  mkdirSync(join(sandbox, "scratch"));
+  writeFileSync(join(sandbox, "docs/private/architecture.md"), "# Private architecture\n");
+  writeFileSync(join(sandbox, "scratch/hidden.md"), "# Hidden\n");
+  writeFileSync(join(sandbox, ".env"), "SECRET=do-not-index\n");
+  writeFileSync(join(sandbox, ".gitignore"), "docs/private/\nscratch/\n.env\n");
+  mkdirSync(join(sandbox, ".mauro"));
+  cpSync(join(packageRoot, "templates/config.json"), join(sandbox, ".mauro/config.json"));
+  editConfig((config) => {
+    config.scan.gitignored.include.push("docs/private/**");
+    config.scan.gitignored.include.push("scratch/**");
+    config.scan.gitignored.include.push(".env");
+    config.scan.gitignored.hide.push("scratch/**");
+  });
+
+  const result = run("init", "--root", sandbox);
+  assert.equal(result.status, 0, result.stderr);
+  const map = readMap();
+  const document = map.files.find((file) => file.path === "docs/private/architecture.md");
+  assert.equal(document.gitignored, true);
+  assert.equal(map.files.some((file) => file.path === ".env"), false);
+  assert.equal(map.files.some((file) => file.path === "scratch/hidden.md"), false);
+  assert.equal(map.perimeter_regions.some((region) => region.path === "scratch"), false);
+  assert.equal(map.scan_summary.gitignored_scanned_files, 1);
+  assert.equal(map.perimeter_regions.some((region) => region.path === "docs/private"), false);
+
+  writeFileSync(join(sandbox, "docs/private/architecture.md"), "# Changed private architecture\n");
+  assert.match(run("check", "--root", sandbox).stdout, /Bearing check: REVIEW/);
+});
+
+test("changing gitignore makes repository knowledge suspect", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  writeFileSync(join(sandbox, ".gitignore"), "build/\n");
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  writeFileSync(join(sandbox, ".gitignore"), "build/\nprivate-docs/\n");
+  assert.match(run("check", "--root", sandbox).stdout, /Bearing check: REVIEW/);
+});
+
+test("existing configurations without gitignored policy keep record defaults", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  mkdirSync(join(sandbox, "docs/private"), { recursive: true });
+  writeFileSync(join(sandbox, "docs/private/notes.md"), "# Notes\n");
+  writeFileSync(join(sandbox, ".gitignore"), "docs/private/\n");
+  mkdirSync(join(sandbox, ".mauro"));
+  cpSync(join(packageRoot, "templates/config.json"), join(sandbox, ".mauro/config.json"));
+  editConfig((config) => { delete config.scan.gitignored; });
+
+  const result = run("init", "--root", sandbox);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readMap().files.some((file) => file.path === "docs/private/notes.md"), false);
+  assert.equal(readMap().perimeter_regions.find((region) => region.path === "docs/private").review_required, true);
+});
+
+test("an explicit ignored-path exclusion resolves the scan decision", () => {
+  assert.equal(git("init", "--quiet").status, 0);
+  mkdirSync(join(sandbox, "docs/private"), { recursive: true });
+  writeFileSync(join(sandbox, "docs/private/notes.md"), "# Notes\n");
+  writeFileSync(join(sandbox, ".gitignore"), "docs/private/\n");
+  mkdirSync(join(sandbox, ".mauro"));
+  cpSync(join(packageRoot, "templates/config.json"), join(sandbox, ".mauro/config.json"));
+  editConfig((config) => config.scan.gitignored.exclude.push("docs/private/**"));
+
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  const map = readMap();
+  const docs = map.perimeter_regions.find((region) => region.path === "docs/private");
+  assert.equal(docs.review_required, false);
+  assert.ok(docs.reasons.includes("gitignored-policy"));
+  assert.equal(map.unresolved.some((item) => item.path === "docs/private"), false);
 });
 
 test("init honors a configuration file prepared before the first Expedition", () => {

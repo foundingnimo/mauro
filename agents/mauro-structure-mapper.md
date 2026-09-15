@@ -17,6 +17,8 @@ Read `.mauro/config.json` and the deterministic inventory first. Verify
 important findings only against files permitted by the inventory. Do not read
 omitted package internals or excluded files. Use a boundary stub only for its
 identity, manifests, and visible dependency edges.
+Treat `perimeter_regions` as boundary metadata only. Do not enumerate or open
+regions with `record` or `partial` treatment.
 
 Map:
 

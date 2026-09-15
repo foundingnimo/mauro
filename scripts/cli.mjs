@@ -78,7 +78,7 @@ function mapCommand(root, action, args, json) {
   }
   if (action === "update") {
     const result = updateMap(root);
-    return output({ outcome: "Map updated", files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, capabilities: result.map.capabilities.length, note: "Mauro preserved semantic capability decisions. A Map synthesizer must review new or removed units." }, json);
+    return output({ outcome: "Map updated", files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, capabilities: result.map.capabilities.length, note: "Mauro preserved semantic capability decisions. A Map synthesizer must review new or removed units and flagged perimeter regions." }, json);
   }
   if (action === "verify") {
     const report = checkRepository(root);
@@ -170,7 +170,7 @@ export async function runCli(argv = process.argv.slice(2)) {
   if (command === "doctor") return doctor(root, pluginRoot, json);
   if (command === "init") {
     const result = initialize(root, pluginRoot);
-    return output({ outcome: "Expedition scaffold created", root, files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, capabilities: result.map.capabilities.length, next: "Run the Mauro mapper agents, then review the Map and Charter." }, json);
+    return output({ outcome: "Expedition scaffold created", root, files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, capabilities: result.map.capabilities.length, next: "Review flagged perimeter regions, run the Mauro mapper agents, then review the Map and Charter." }, json);
   }
   if (!isInitialized(root)) throw new Error("Mauro is not initialized. Run `mauro init`.");
 

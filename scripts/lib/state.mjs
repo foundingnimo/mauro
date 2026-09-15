@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PATHS, SCHEMA_VERSION } from "./constants.mjs";
 import { copyTextIfMissing, ensureDir, exists, fingerprintPath, readJson, repoPath, sha256Buffer, writeJson, writeText } from "./fs.mjs";
 import { scanRepository } from "./inventory.mjs";
-import { fingerprintExcludes, fingerprintOptions, validateConfig } from "./policy.mjs";
+import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions, validateConfig } from "./policy.mjs";
 import { navigatorIdentity, renderClaudeAgent, renderClaudeRule, renderMap, renderNavigatorBrief, slug } from "./render.mjs";
 
 export function isInitialized(root) {
@@ -50,7 +50,7 @@ function rebuildViews(root, map, previousManifest = null) {
     documents: preservedDocuments,
     navigators: {}
   };
-  const watchRoots = [...new Set(map.units.flatMap((unit) => unit.scope === "stub" ? (unit.manifests || [unit.manifest]).filter(Boolean) : [unit.root]))];
+  const watchRoots = [...new Set([".", ...map.units.flatMap((unit) => unit.scope === "stub" ? (unit.manifests || [unit.manifest]).filter(Boolean) : [unit.root])])];
   manifest.documents["doc-map"] = makeDocument(PATHS.mapDocument, "informational", watchRoots);
   manifest.documents["doc-charter"] = previousManifest?.documents?.["doc-charter"] || makeDocument(PATHS.charter, "binding", []);
 
@@ -88,6 +88,8 @@ function rebuildViews(root, map, previousManifest = null) {
 }
 
 export function buildFingerprints(root, manifest, config, map) {
+  const ignoredPolicy = createGitignoredPolicy(root, config);
+  const options = fingerprintOptions(config, map, root, ignoredPolicy);
   const fingerprints = {
     schema_version: SCHEMA_VERSION,
     config_digest: sha256Buffer(Buffer.from(JSON.stringify(config))),
@@ -97,13 +99,13 @@ export function buildFingerprints(root, manifest, config, map) {
   for (const [id, record] of Object.entries(manifest.knowledge)) {
     fingerprints.records[id] = {};
     for (const path of record.paths || []) {
-      fingerprints.records[id][path] = fingerprintPath(root, path, fingerprintExcludes(config, map, path), fingerprintOptions(config, map, root));
+      fingerprints.records[id][path] = fingerprintPath(root, path, fingerprintExcludes(config, map, path, ignoredPolicy), options);
     }
   }
   for (const [id, document] of Object.entries(manifest.documents)) {
     fingerprints.documents[id] = {};
     for (const path of document.watches || []) {
-      fingerprints.documents[id][path] = fingerprintPath(root, path, fingerprintExcludes(config, map, path), fingerprintOptions(config, map, root));
+      fingerprints.documents[id][path] = fingerprintPath(root, path, fingerprintExcludes(config, map, path, ignoredPolicy), options);
     }
   }
   return fingerprints;

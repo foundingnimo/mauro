@@ -17,6 +17,8 @@ Read `.mauro/config.json` and the deterministic inventory. Inspect only
 included packages and permitted files. Do not open stub or omitted package
 internals. Evidence-mode files can verify a capability claim. They cannot
 define a capability.
+Do not enumerate or open `perimeter_regions` with `record` or `partial`
+treatment. A perimeter path is not capability evidence.
 
 Identify stable business and platform capabilities. For each capability, map:
 

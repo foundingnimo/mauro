@@ -17,6 +17,9 @@ Charter, and working-tree state.
 
 Treat the scan configuration as a boundary. Do not restore omitted units,
 excluded files, or evidence-only findings that a survey included by mistake.
+Preserve deterministic `perimeter_regions` without adding inferred contents.
+Keep `review_required` ignored regions unresolved until a person changes the
+scan policy or accepts the boundary.
 
 Create:
 

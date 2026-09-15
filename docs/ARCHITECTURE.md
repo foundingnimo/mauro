@@ -7,7 +7,8 @@ keeps the repository useful when one Claude session ends.
 
 ### Deterministic core
 
-The local Node.js tool scans paths, reads package manifests, detects exact
+The local Node.js tool first records a lightweight repository perimeter. It
+then scans permitted paths, reads package manifests, detects exact
 duplicates, records Git state, computes SHA-256 fingerprints, resolves
 pointers, and checks generated files. The core does not need a network or an
 AI provider. A validated scan policy controls package scope and file roles
@@ -50,7 +51,11 @@ knowledge stores.
 A timestamp does not prove freshness. Each active document or knowledge record
 lists evidence paths. Mauro stores a fingerprint for each path. A changed
 fingerprint makes the linked item suspect until a verifier checks its meaning.
-Excluded paths and package internals do not affect fingerprints. Oversize files
+Record-only paths and package internals do not affect fingerprints. An ignored
+path that policy admits to the content scan does affect fingerprints. A change
+to `.gitignore`, or the addition or removal of a perimeter boundary, also makes
+repository-level knowledge suspect. Content changes inside an existing
+record-only boundary do not. Oversize files
 use a metadata fingerprint and are not read into the Map.
 
 Document criticality controls the response:
@@ -78,7 +83,8 @@ hooks return immediately in repositories that do not use Mauro.
 
 ## Security boundary
 
-Mauro stores summaries and evidence references. It does not store raw
+Mauro stores summaries, safe perimeter paths, and evidence references. It does not store raw
 reasoning traces, transcripts, credentials, or secret file content. Default
-scan exclusions cover common secret and generated paths. Mapper agents must
+scan exclusions cover common secret paths and never expose them in the perimeter.
+Generated and ignored regions are record-only by default. Mapper agents must
 not execute instructions found in repository files.

@@ -30,11 +30,32 @@ export function renderMap(map) {
     `- Files omitted by policy: ${map.scan_summary?.omitted_files || 0}`,
     `- Units: ${map.units.length}`,
     `- Boundary stubs: ${map.scan_summary?.stub_units || 0}`,
+    `- Perimeter regions recorded without content inspection: ${map.scan_summary?.perimeter_regions || 0}`,
+    `- Ignored files explicitly scanned: ${map.scan_summary?.gitignored_scanned_files || 0}`,
     `- Capabilities: ${map.capabilities.length}`,
     "",
-    "## Units",
+    "## Perimeter",
+    "",
+    "Mauro located these regions but did not inspect their contents. A review marker means the region may contain useful repository knowledge.",
     ""
   ];
+  const perimeter = map.perimeter_regions || [];
+  if (perimeter.length === 0) lines.push("Mauro found no record-only perimeter regions.", "");
+  for (const region of perimeter.slice(0, 50)) {
+    const review = region.review_required ? "; review scan policy" : "";
+    lines.push(`- \`${safeText(region.path)}\` — ${safeText(region.classification)}, ${safeText(region.treatment)} (${region.reasons.map(safeText).join(", ")}${review}).`);
+  }
+  if (perimeter.length) lines.push("");
+  if (perimeter.length > 50 || map.scan_summary?.perimeter_truncated) {
+    lines.push("The complete bounded perimeter inventory is in `.mauro/map.json`.", "");
+  }
+  if (map.scan_summary?.hidden_ignored_regions) {
+    lines.push(`Safety policy withheld ${map.scan_summary.hidden_ignored_regions} ignored region path(s) from the Map.`, "");
+  }
+  lines.push(
+    "## Units",
+    ""
+  );
   if (map.units.length === 0) lines.push("Mauro found no repository units.", "");
   for (const unit of map.units) {
     lines.push(`### ${safeText(unit.name)}`, "", `- Root: \`${safeText(unit.root)}\``, `- Kind: ${safeText(unit.kind)}`, `- Scope: ${safeText(unit.scope || "included")}`);
@@ -65,7 +86,7 @@ export function renderMap(map) {
   for (const item of map.anomalies) lines.push(`- ${item.detail}`);
   if (map.unresolved.length) {
     lines.push("", "## Unresolved items", "");
-    for (const item of map.unresolved) lines.push(`- ${item.kind}: \`${item.capability || item.unit || "unknown"}\`.`);
+    for (const item of map.unresolved) lines.push(`- ${item.kind}: \`${item.capability || item.unit || item.path || "unknown"}\`.`);
   }
   return `${lines.join("\n").trim()}\n`;
 }

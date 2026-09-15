@@ -43,10 +43,18 @@
         "included_units": { "type": "integer", "minimum": 0 },
         "stub_units": { "type": "integer", "minimum": 0 },
         "omitted_units": { "type": "integer", "minimum": 0 },
-        "omitted_unit_roots": { "type": "array", "items": { "type": "string" } }
+        "omitted_unit_roots": { "type": "array", "items": { "type": "string" } },
+        "perimeter_regions": { "type": "integer", "minimum": 0 },
+        "perimeter_regions_listed": { "type": "integer", "minimum": 0 },
+        "perimeter_truncated": { "type": "boolean" },
+        "gitignored_regions": { "type": "integer", "minimum": 0 },
+        "gitignored_scanned_files": { "type": "integer", "minimum": 0 },
+        "hidden_ignored_regions": { "type": "integer", "minimum": 0 },
+        "review_required_regions": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
     },
+    "perimeter_regions": { "type": "array", "items": { "$ref": "#/$defs/perimeterRegion" } },
     "files": { "type": "array", "items": { "type": "object" } },
     "units": { "type": "array", "items": { "$ref": "#/$defs/unit" } },
     "capabilities": { "type": "array", "items": { "$ref": "#/$defs/capability" } },
@@ -57,6 +65,20 @@
     "unresolved": { "type": "array", "items": { "type": "object" } }
   },
   "$defs": {
+    "perimeterRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind", "treatment", "classification", "reasons", "patterns", "review_required"],
+      "properties": {
+        "path": { "type": "string" },
+        "kind": { "enum": ["directory", "file", "symlink"] },
+        "treatment": { "enum": ["record", "partial"] },
+        "classification": { "enum": ["document", "fixture", "generated", "test", "unknown"] },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "patterns": { "type": "array", "items": { "type": "string" } },
+        "review_required": { "type": "boolean" }
+      }
+    },
     "unit": {
       "type": "object",
       "required": ["id", "name", "root", "kind", "scope"],

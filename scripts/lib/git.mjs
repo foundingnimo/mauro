@@ -43,3 +43,23 @@ export function gitMergeBase(root, target = "HEAD") {
 export function gitHead(root) {
   return git(root, ["rev-parse", "HEAD"]);
 }
+
+export function gitIgnoredRegions(root) {
+  if (git(root, ["rev-parse", "--is-inside-work-tree"], "false") !== "true") return [];
+  try {
+    const output = execFileSync("git", [
+      "-C", root, "ls-files", "--others", "--ignored", "--exclude-standard",
+      "--directory", "-z"
+    ], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      maxBuffer: 64 * 1024 * 1024
+    });
+    return output.split("\0").filter(Boolean).map((value) => ({
+      path: value.endsWith("/") ? value.slice(0, -1) : value,
+      kind: value.endsWith("/") ? "directory" : "file"
+    }));
+  } catch {
+    throw new Error("Mauro could not enumerate Git-ignored paths safely. No repository content was scanned.");
+  }
+}

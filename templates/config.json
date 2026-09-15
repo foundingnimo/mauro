@@ -60,6 +60,12 @@
       "include": [],
       "exclude": []
     },
+    "gitignored": {
+      "default": "record",
+      "include": [],
+      "exclude": [],
+      "hide": []
+    },
     "paths": {
       "exclude": []
     },

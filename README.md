@@ -129,7 +129,13 @@ This excerpt shows the package and role fields in the generated file:
     },
     "tests": { "mode": "evidence", "patterns": ["**/*.test.*"] },
     "fixtures": { "mode": "evidence", "patterns": ["**/fixtures/**"] },
-    "generated": { "mode": "exclude", "patterns": ["**/dist/**"] }
+    "generated": { "mode": "exclude", "patterns": ["**/dist/**"] },
+    "gitignored": {
+      "default": "record",
+      "include": ["docs/private/**"],
+      "exclude": [],
+      "hide": []
+    }
   }
 }
 ```
@@ -148,6 +154,17 @@ File roles use these modes:
 - `evidence`: Let files support claims, but do not use them to define
   capabilities or duplication and Refit findings.
 - `exclude`: Do not scan or fingerprint the files.
+
+Mauro treats `.gitignore` as repository evidence, not as an absolute scan
+boundary. The default `record` mode lists ignored regions in the perimeter
+inventory without reading their contents. Use `include` for intentionally
+ignored evidence such as local documentation. Use `exclude` to keep a region
+record-only and mark that choice as intentional. Use `hide` when its path must
+not appear in the Map. Safety
+exclusions for secrets and Mauro internals always win. An ignored-file include
+does not override generated, test, fixture, document, path, or language policy.
+The same perimeter inventory records generated and policy-excluded boundaries
+even when Git does not ignore them.
 
 The scan also supports package-specific role overrides, document selection,
 path exclusions, language filters, a maximum file size, and opt-in in-repository

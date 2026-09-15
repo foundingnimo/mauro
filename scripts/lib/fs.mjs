@@ -80,29 +80,42 @@ export function matchesGlob(pattern, path) {
   return globRegex(toPosix(pattern)).test(toPosix(path));
 }
 
-export function isExcluded(path, extra = []) {
+export function exclusionMatch(path, extra = []) {
   const normalized = toPosix(path).replace(/^\.\//, "");
-  return [...HARD_EXCLUDES, ...extra].some((pattern) => {
-    const clean = toPosix(pattern).replace(/^\.\//, "");
-    if (clean.endsWith("/**")) {
-      const prefix = clean.slice(0, -3).replace(/\/$/, "");
-      return normalized === prefix || normalized.startsWith(`${prefix}/`);
+  for (const [source, patterns] of [["hard", HARD_EXCLUDES], ["policy", extra]]) {
+    for (const pattern of patterns) {
+      const clean = toPosix(pattern).replace(/^\.\//, "");
+      if (clean.endsWith("/**")) {
+        const prefix = clean.slice(0, -3).replace(/\/$/, "");
+        const matched = /[*?]/.test(prefix)
+          ? globRegex(clean).test(normalized) || globRegex(clean).test(`${normalized}/__mauro_boundary__`)
+          : normalized === prefix || normalized.startsWith(`${prefix}/`);
+        if (matched) return { source, pattern };
+        continue;
+      }
+      if (!clean.includes("/")) {
+        if (globRegex(clean).test(fileName(normalized))) return { source, pattern };
+        continue;
+      }
+      if (globRegex(clean).test(normalized)) return { source, pattern };
     }
-    if (!clean.includes("/")) {
-      return globRegex(clean).test(fileName(normalized));
-    }
-    return globRegex(clean).test(normalized);
-  });
+  }
+  return null;
+}
+
+export function isExcluded(path, extra = []) {
+  return Boolean(exclusionMatch(path, extra));
 }
 
 export function walkFiles(root, extraExcludes = [], options = {}) {
   const found = [];
   const active = new Set();
   const prefix = toPosix(options.pathPrefix || "").replace(/^\.\/?|\/$/g, "");
-  const excluded = (path) => isExcluded(path, extraExcludes)
-    || Boolean(prefix && isExcluded(`${prefix}/${toPosix(path)}`, extraExcludes));
+  const excluded = (path) => exclusionMatch(path, extraExcludes)
+    || (prefix && exclusionMatch(`${prefix}/${toPosix(path)}`, extraExcludes));
   const accepted = (path, absolute) => !options.acceptFile
     || options.acceptFile(prefix ? `${prefix}/${toPosix(path)}` : toPosix(path), absolute);
+  const reportPath = (path) => prefix ? `${prefix}/${toPosix(path)}` : toPosix(path);
   function visit(directory) {
     const realDirectory = realpathSync(directory);
     if (active.has(realDirectory)) return;
@@ -111,7 +124,16 @@ export function walkFiles(root, extraExcludes = [], options = {}) {
       for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
         const absolute = join(directory, entry.name);
         const rel = toPosix(relative(root, absolute));
-        if (excluded(rel)) continue;
+        const excludedBy = excluded(rel);
+        if (excludedBy) {
+          options.onExcluded?.({
+            path: prefix ? `${prefix}/${rel}` : rel,
+            kind: entry.isDirectory() ? "directory" : entry.isSymbolicLink() ? "symlink" : "file",
+            source: excludedBy.source,
+            pattern: excludedBy.pattern
+          });
+          continue;
+        }
         if (entry.isSymbolicLink()) {
           if (!options.followSymlinks) continue;
           let target;
@@ -124,11 +146,17 @@ export function walkFiles(root, extraExcludes = [], options = {}) {
           if (targetRel === ".." || targetRel.startsWith(`..${sep}`) || excluded(toPosix(targetRel))) continue;
           const targetStat = statSync(absolute);
           if (targetStat.isDirectory()) visit(absolute);
-          else if (targetStat.isFile() && accepted(rel, absolute)) found.push(rel);
+          else if (targetStat.isFile()) {
+            if (accepted(rel, absolute)) found.push(rel);
+            else options.onRejected?.({ path: reportPath(rel), kind: "symlink" });
+          }
           continue;
         }
         if (entry.isDirectory()) visit(absolute);
-        else if (entry.isFile() && accepted(rel, absolute)) found.push(rel);
+        else if (entry.isFile()) {
+          if (accepted(rel, absolute)) found.push(rel);
+          else options.onRejected?.({ path: reportPath(rel), kind: "file" });
+        }
       }
     } finally {
       active.delete(realDirectory);
@@ -168,7 +196,20 @@ export function fingerprintPath(root, rel, excludes = [], options = {}) {
   if (!stat.isDirectory()) return "unsupported";
   const hash = createHash("sha256");
   const pathPrefix = rel === "." ? "" : rel;
-  for (const file of walkFiles(absolute, excludes, { ...options, pathPrefix })) {
+  const boundaries = [];
+  const recordBoundary = (event) => boundaries.push(event);
+  for (const file of walkFiles(absolute, excludes, {
+    ...options,
+    pathPrefix,
+    onExcluded(event) {
+      recordBoundary({ ...event, treatment: "excluded" });
+      options.onExcluded?.(event);
+    },
+    onRejected(event) {
+      recordBoundary({ ...event, treatment: "record" });
+      options.onRejected?.(event);
+    }
+  })) {
     const fileStat = statSync(join(absolute, file));
     hash.update(file);
     hash.update("\0");
@@ -178,6 +219,9 @@ export function fingerprintPath(root, rel, excludes = [], options = {}) {
       hash.update(readFileSync(join(absolute, file)));
     }
     hash.update("\0");
+  }
+  for (const boundary of boundaries.sort((a, b) => a.path.localeCompare(b.path))) {
+    hash.update(`boundary\0${boundary.path}\0${boundary.kind}\0${boundary.treatment}\0${boundary.source || "filter"}\0${boundary.pattern || ""}\0`);
   }
   return `sha256:${hash.digest("hex")}`;
 }

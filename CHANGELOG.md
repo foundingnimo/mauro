@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add a safe perimeter census for generated, excluded, and Git-ignored regions.
+- Add configurable ignored-path scanning, recording, and path hiding.
+- Include admitted ignored evidence and `.gitignore` changes in freshness checks.
+
 ## 0.1.0
 
 - Add the Mauro Claude Code skill and plugin package.
