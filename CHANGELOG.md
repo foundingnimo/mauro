@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.3 (2026-09-16)
+
 - Add the prioritized product roadmap in `backlog.md`.
 - Serialize Mauro state mutations with an atomic, owner-labelled local lock.
 - Protect Map regeneration, document confirmation, Tool Gap changes, and the

@@ -1,6 +1,6 @@
 {
   "name": "@foundingnimo/mauro",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Repository cartography and durable context for Claude Code agents",
   "type": "module",
   "license": "MIT",
