@@ -27,6 +27,14 @@ test("README lists every public command and frequent alias", () => {
   assert.match(commandSection, /`suggest` is a synonym/);
 });
 
+test("README overview includes durable coordination state", () => {
+  const overview = section("# Mauro", "## Quickstart");
+  assert.doesNotMatch(overview, /Mauro has four durable outputs/);
+  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal"]) {
+    assert.ok(overview.includes(text), `README overview is missing: ${text}`);
+  }
+});
+
 test("README keeps the autonomous Quickstart and shared Navigator contract", () => {
   const quickstart = section("## Quickstart", "## Install");
   for (const command of ["/mauro init", "/mauro next", "/mauro run", "/mauro run activate", "/mauro run finish", "/mauro check", "/mauro help"]) {

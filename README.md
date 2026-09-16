@@ -4,12 +4,16 @@ Mauro maps software repositories and preserves verified context between
 Claude Code sessions. It is designed for monorepos whose code, documentation,
 and ownership boundaries do not always match their directory structure.
 
-Mauro has four durable outputs:
+Mauro keeps six kinds of durable repository context:
 
 - A **Charter** records intended boundaries and human decisions.
 - A **Map** records observed repository structure and relationships.
 - **Navigators** provide aspect-specific agent views.
 - The **Logbook** provides short, path-scoped knowledge to Claude Code.
+- **Voyage records** preserve work lifecycle, approved scope, and active path
+  ownership between sessions.
+- The **Tool Gap Log** records recurring operations that could become reusable
+  Toolbox tools.
 
 Mauro writes human-readable notes in ASD-STE100 Simplified Technical
 English. Project identifiers and declared technical nouns are permitted.
@@ -27,6 +31,8 @@ The current 0.1 release provides:
 - A registered read-only Node.js Toolbox for recurring repository analysis
 - A project-local Tool Gap Log for recurring operations missing from the Toolbox
 - Document review: Mauro re-checks a document whose evidence changed
+- Atomic writer locking with owner details and safe stale-lock recovery
+- Durable Voyage IDs, lifecycle commands, and overlapping-path refusal
 - Claude Code agents, hooks, and workflow instructions
 
 Semantic capability mapping, context curation, and Refit proposals are
