@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Add the prioritized product roadmap in `backlog.md`.
+- Serialize Mauro state mutations with an atomic, owner-labelled local lock.
+- Protect Map regeneration, document confirmation, Tool Gap changes, and the
+  hook changed-path queue from concurrent writers.
+- Report active and stale lock ownership through `mauro doctor`.
+- Add `mauro doctor --clear-stale-lock`, which refuses unless the local owner
+  process is proven gone.
+- Give every `/mauro run` a durable Voyage ID and lifecycle record under
+  `.mauro/voyages/`.
+- Add explicit Voyage activation, resume, finish, abandon, and status commands.
+- Claim approved path scopes at activation and refuse overlap with another
+  active Voyage.
+- Report active Voyages to other Claude Code sessions at session start.
+
 - Add a README Quickstart and document the full current autonomous workflow.
 - Make generated Navigator descriptions specific enough for proactive Claude
   Code delegation from any session in the repository.

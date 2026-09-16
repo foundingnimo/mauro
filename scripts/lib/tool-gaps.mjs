@@ -1,5 +1,6 @@
 import { PATHS, SCHEMA_VERSION } from "./constants.mjs";
 import { exists, readJson, repoPath, writeJson } from "./fs.mjs";
+import { withProjectLock } from "./lock.mjs";
 
 export const TOOL_GAP_CANDIDATE_OCCURRENCES = 3;
 export const TOOL_GAP_CANDIDATE_VOYAGES = 2;
@@ -176,7 +177,7 @@ function candidateReady(gap) {
   return gap.occurrences >= TOOL_GAP_CANDIDATE_OCCURRENCES && gap.voyages.length >= TOOL_GAP_CANDIDATE_VOYAGES;
 }
 
-export function recordToolGap(root, input, registeredTools = []) {
+function recordToolGapUnlocked(root, input, registeredTools = []) {
   const log = loadToolGapLog(root);
   const key = gapKey(input.key);
   const voyage = identifier(input.voyage, "--voyage");
@@ -245,6 +246,10 @@ export function recordToolGap(root, input, registeredTools = []) {
   return { recorded: true, outcome: reopened ? "reopened" : gap.occurrences === 1 ? "created" : promoted ? "promoted" : "updated", gap };
 }
 
+export function recordToolGap(root, input, registeredTools = []) {
+  return withProjectLock(root, "record Tool Gap", () => recordToolGapUnlocked(root, input, registeredTools));
+}
+
 export function listToolGaps(root, status = "all") {
   if (status !== "all" && !STATUSES.has(status)) throw new Error(`Unknown Tool Gap status: ${status}`);
   return loadToolGapLog(root).gaps
@@ -258,7 +263,7 @@ export function showToolGap(root, id) {
   return gap;
 }
 
-export function dismissToolGap(root, id, reason) {
+function dismissToolGapUnlocked(root, id, reason) {
   const log = loadToolGapLog(root);
   const gap = log.gaps.find((item) => item.id === id);
   if (!gap) throw new Error(`Unknown Tool Gap: ${id}`);
@@ -269,7 +274,11 @@ export function dismissToolGap(root, id, reason) {
   return gap;
 }
 
-export function resolveToolGap(root, id, tool, version) {
+export function dismissToolGap(root, id, reason) {
+  return withProjectLock(root, "dismiss Tool Gap", () => dismissToolGapUnlocked(root, id, reason));
+}
+
+function resolveToolGapUnlocked(root, id, tool, version) {
   const log = loadToolGapLog(root);
   const gap = log.gaps.find((item) => item.id === id);
   if (!gap) throw new Error(`Unknown Tool Gap: ${id}`);
@@ -282,6 +291,10 @@ export function resolveToolGap(root, id, tool, version) {
   gap.dismissal = null;
   saveToolGapLog(root, log);
   return gap;
+}
+
+export function resolveToolGap(root, id, tool, version) {
+  return withProjectLock(root, "resolve Tool Gap", () => resolveToolGapUnlocked(root, id, tool, version));
 }
 
 export function exportToolGap(root, id) {

@@ -70,10 +70,21 @@ performed by Claude agents through the Mauro skill.
    /mauro run "Add account recovery"
    ```
 
-   Mauro selects the responsible Navigators and relevant knowledge, prepares
-   a bounded plan, verifies the implementation, reviews affected documents,
-   and records durable context. It does not commit, push, deploy, or update a
-   pull request without explicit authorization.
+   This creates a durable planning record such as `V-0001`; it does not claim
+   code paths yet. Mauro selects the responsible Navigators and relevant
+   knowledge and writes the proposed plan to the returned Chronicle path.
+   After you approve the plan, Mauro activates its predicted path scope:
+
+   ```text
+   /mauro run activate V-0001
+   ```
+
+   Use one or more `--path <repository-path>` values when the approved scope
+   differs from Mauro's prediction. Activation refuses paths held by another
+   active Voyage. After verification, document review, and context curation,
+   close the lease with `/mauro run finish V-0001`. If the work stops, use
+   `/mauro run abandon V-0001 --reason "<reason>"`. Mauro does not commit,
+   push, deploy, or update a pull request without explicit authorization.
 
 Run `/mauro check` at any time to inspect the current Bearing. Use
 `/mauro help` for the full command list.
@@ -158,7 +169,7 @@ Claude uses the plugin name as the command namespace. The plugin name is
 | `map` | `m` | Inspect or update the repository Map |
 | `next` | `n` | List findings and suggested next steps; `suggest` is a synonym |
 | `pr` | `p` | Generate bounded pull-request context |
-| `run` | `r` | Start a development Voyage |
+| `run` | `r` | Create or manage a development Voyage |
 | `status` | `s` | Show Mauro state |
 | `where` | `w` | Find code and docs for a concept |
 
@@ -243,13 +254,16 @@ docs/mauro/map.md           human-readable observed structure
 .mauro/manifest.json        knowledge and documentation index
 .mauro/fingerprints.json    freshness evidence
 .mauro/tool-gaps.json       recurring missing Toolbox operations
+.mauro/voyages/             durable Voyage records and path leases
 docs/mauro/chronicles/reviews/  document review verdicts and evidence
 .claude/rules/mauro/        generated path-scoped knowledge
 .claude/agents/                generated project Navigators
 ```
 
 The changed-path queue in `.mauro/changed-paths.json` is machine state. A
-team can commit it or ignore it according to its workflow.
+team can commit it or ignore it according to its workflow. Voyage records are
+repository state. Commit them when other worktrees or clones must see the same
+work ownership and history.
 
 ## Use Navigators from other Claude sessions
 
@@ -287,6 +301,35 @@ the workflow-specific exception described above. Do not edit generated agent
 files directly. Change their Map evidence and regenerate them instead. See the
 [Claude Code subagent documentation](https://code.claude.com/docs/en/subagents#choose-the-subagent-scope)
 for the project-agent loading rules.
+
+### Concurrent sessions
+
+Mauro serializes its own state mutations with a transient lock in the host's
+private temporary directory. The path is derived from the repository working
+tree and local user, so sessions for the same user in the same working tree
+share one lock without adding a file to Git. The lock covers initialization,
+Map and Navigator regeneration, document confirmation, Tool Gap mutation, and
+hook updates to the changed-path queue. A second writer waits briefly, then
+reports the owning process, host, operation, acquisition time, and lock path.
+`mauro doctor` also shows the current owner.
+
+Mauro removes the lock after a successful or failed operation. If a process is
+forcibly terminated, `mauro doctor` reports its local lock as stale. Run
+`mauro doctor --clear-stale-lock` to remove it only after Mauro proves that the
+recorded local process is gone. Mauro refuses to clear an active, remote, or
+unreadable lock.
+
+Each `/mauro run "<objective>"` also creates a durable record under
+`.mauro/voyages/`. A planning Voyage owns no paths. After plan approval,
+`mauro run activate <id>` atomically checks and claims its approved paths. An
+overlap with another active Voyage is refused. `finish` or `abandon --reason`
+closes the lease; the paths remain in the record as audit evidence. Use
+`mauro run status` in any session to see current ownership.
+
+This layer coordinates Mauro writers and active Voyage scopes for the same
+local user and working tree. Separate local users, Git worktrees, and remote
+hosts do not yet share the transient writer lock. They see Voyage leases only
+when repository state is shared or synchronized; see [`backlog.md`](backlog.md).
 
 ## Configure an Expedition
 

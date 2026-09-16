@@ -29,12 +29,12 @@ test("README lists every public command and frequent alias", () => {
 
 test("README keeps the autonomous Quickstart and shared Navigator contract", () => {
   const quickstart = section("## Quickstart", "## Install");
-  for (const command of ["/mauro init", "/mauro next", "/mauro run", "/mauro check", "/mauro help"]) {
+  for (const command of ["/mauro init", "/mauro next", "/mauro run", "/mauro run activate", "/mauro run finish", "/mauro check", "/mauro help"]) {
     assert.ok(quickstart.includes(command), `Quickstart is missing ${command}`);
   }
 
   const sharing = section("## Use Navigators from other Claude sessions", "## Configure an Expedition");
-  for (const text of [".claude/agents/", ".claude/rules/mauro/", "docs/mauro/", "/agents", "/mauro who <path>", "/mauro impact", "read-only", "Restart a session"]) {
+  for (const text of [".claude/agents/", ".claude/rules/mauro/", ".mauro/voyages/", "docs/mauro/", "/agents", "/mauro who <path>", "/mauro impact", "read-only", "Restart a session", "mauro run status"]) {
     assert.ok(sharing.includes(text), `Navigator sharing guidance is missing: ${text}`);
   }
 });

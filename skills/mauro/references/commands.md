@@ -14,8 +14,8 @@ Use exact command names and aliases. Do not resolve partial names.
 | `map` | `m` | Show, find, update, or verify the repository Map. |
 | `next` | `n` | List findings and suggest next steps with commands. `suggest` is a synonym. |
 | `pr` | `p` | Preview, update, or check pull-request context. |
-| `run` | `r` | Start or resume a development Voyage. |
-| `status` | `s` | Show initialization, Map, knowledge, and freshness state. |
+| `run` | `r` | Create or manage a development Voyage and path lease. |
+| `status` | `s` | Show initialization, Map, knowledge, Voyage, and freshness state. |
 | `where` | `w` | Find code, tests, documents, and knowledge for a concept. |
 
 ## Infrequent commands
@@ -174,6 +174,16 @@ verification commit. It refuses without an evidence file under
 /mauro refit propose
 /mauro doctor
 /mauro run "<objective>"
-/mauro run status
-/mauro run resume
+/mauro run status [V-0001]
+/mauro run activate V-0001 [--path <approved-path>]...
+/mauro run resume V-0001
+/mauro run finish V-0001
+/mauro run abandon V-0001 --reason "<reason>"
+/mauro doctor --clear-stale-lock
 ```
+
+Starting a Voyage creates a durable `planning` record under `.mauro/voyages/`.
+It owns no paths until the user approves the plan and Mauro runs `activate`.
+Activation atomically refuses overlap with any active Voyage. Only `finish` or
+`abandon` closes the lease; abandonment requires a reason. `resume` records a
+handoff without changing the lease.

@@ -15,6 +15,8 @@ import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
 import { describeTool, listTools, runTool } from "./lib/toolbox.mjs";
 import { dismissToolGap, exportToolGap, listToolGaps, recordToolGap, resolveToolGap, showToolGap } from "./lib/tool-gaps.mjs";
+import { clearStaleProjectLock, projectLockStatus } from "./lib/lock.mjs";
+import { abandonVoyage, activateVoyage, createVoyage, finishVoyage, getVoyage, listVoyages, resumeVoyage, summarizeVoyages } from "./lib/voyages.mjs";
 
 function option(args, name) {
   const index = args.indexOf(name);
@@ -28,6 +30,16 @@ function requiredOption(args, name) {
   const value = option(args, name);
   if (!value || value === true) throw new Error(`${name} requires a value.`);
   return value;
+}
+
+function repeatedOption(args, name) {
+  const values = [];
+  while (args.includes(name)) {
+    const value = option(args, name);
+    if (!value || value === true) throw new Error(`${name} requires a value.`);
+    values.push(value);
+  }
+  return values;
 }
 
 function rejectArguments(args, usage) {
@@ -260,10 +272,14 @@ function installStamp(pluginRoot) {
   try { return readJson(path); } catch { return null; }
 }
 
-function doctor(root, pluginRoot, json) {
-  const files = [".claude-plugin/plugin.json", "skills/mauro/SKILL.md", "hooks/hooks.json", "bin/mauro", "scripts/lib/toolbox.mjs", "scripts/lib/tool-gaps.mjs"];
+function doctor(root, pluginRoot, json, args = []) {
+  const clearLock = option(args, "--clear-stale-lock");
+  if (clearLock !== null && clearLock !== true) throw new Error("--clear-stale-lock does not take a value.");
+  rejectArguments(args, "mauro doctor [--clear-stale-lock]");
+  const lockCleanup = clearLock ? clearStaleProjectLock(root) : null;
+  const files = [".claude-plugin/plugin.json", "skills/mauro/SKILL.md", "hooks/hooks.json", "bin/mauro", "scripts/lib/toolbox.mjs", "scripts/lib/tool-gaps.mjs", "scripts/lib/lock.mjs", "scripts/lib/voyages.mjs", "schemas/voyage.schema.json"];
   const installation = files.map((path) => ({ path, present: exists(resolve(pluginRoot, path)) }));
-  const result = { version: MAURO_VERSION, install: installStamp(pluginRoot), tool: installation, project_initialized: isInitialized(root) };
+  const result = { version: MAURO_VERSION, install: installStamp(pluginRoot), tool: installation, project_initialized: isInitialized(root), lock_cleanup: lockCleanup, project_lock: projectLockStatus(root) };
   if (result.project_initialized) {
     const summary = statusSummary(root);
     result.charter = summary.charter;
@@ -271,6 +287,64 @@ function doctor(root, pluginRoot, json) {
   }
   output(result, json);
   if (installation.some((item) => !item.present)) process.exitCode = 1;
+}
+
+function requireVoyageId(args, usage) {
+  const id = args.shift();
+  if (!id) throw new Error(`Usage: ${usage}`);
+  return id;
+}
+
+function runCommand(root, action, args, json) {
+  if (!action || action === "status") {
+    const id = args.shift();
+    rejectArguments(args, "mauro run status [voyage-id]");
+    return output(id ? getVoyage(root, id) : { summary: summarizeVoyages(root), voyages: listVoyages(root) }, json);
+  }
+  if (action === "activate") {
+    const id = requireVoyageId(args, "mauro run activate <voyage-id> [--path <path>]...");
+    const paths = repeatedOption(args, "--path");
+    rejectArguments(args, "mauro run activate <voyage-id> [--path <path>]...");
+    return output({ outcome: "Voyage activated", voyage: activateVoyage(root, id, paths), note: "The approved path lease is active. Finish or abandon the Voyage to release it." }, json);
+  }
+  if (action === "resume") {
+    const id = requireVoyageId(args, "mauro run resume <voyage-id>");
+    rejectArguments(args, "mauro run resume <voyage-id>");
+    return output({ outcome: "Voyage resumed", voyage: resumeVoyage(root, id) }, json);
+  }
+  if (action === "finish") {
+    const id = requireVoyageId(args, "mauro run finish <voyage-id>");
+    rejectArguments(args, "mauro run finish <voyage-id>");
+    return output({ outcome: "Voyage completed and path lease released", voyage: finishVoyage(root, id) }, json);
+  }
+  if (action === "abandon") {
+    const id = requireVoyageId(args, "mauro run abandon <voyage-id> --reason <reason>");
+    const reason = requiredOption(args, "--reason");
+    rejectArguments(args, "mauro run abandon <voyage-id> --reason <reason>");
+    return output({ outcome: "Voyage abandoned and path lease released", voyage: abandonVoyage(root, id, reason) }, json);
+  }
+
+  const allowBehind = option(args, "--allow-behind");
+  if (allowBehind !== null && allowBehind !== true) throw new Error("--allow-behind does not take a value.");
+  const objective = [action, ...args].join(" ").trim();
+  assertBranchCurrent(root, { action: "plan", allowBehind: Boolean(allowBehind) });
+  const voyage = createVoyage(root, objective, { allowBehind: Boolean(allowBehind) });
+  const report = checkRepository(root);
+  return output({
+    outcome: "Voyage created for planning",
+    voyage,
+    bearing: report.current ? "current" : "needs attention",
+    charter: report.charter.state,
+    required: report.charter.state === "complete"
+      ? "Load the responsible Navigators and active knowledge before implementation."
+      : "Load the responsible Navigators and active knowledge before implementation. The Charter is not complete, so state in the plan that no Charter constraint was checked.",
+    next: [
+      `Write the approved plan to ${voyage.plan_path}.`,
+      voyage.proposed_paths.length
+        ? `After plan approval, run \`mauro run activate ${voyage.id}\` or pass explicit --path values.`
+        : `After plan approval, run \`mauro run activate ${voyage.id} --path <approved-path>\`.`
+    ]
+  }, json);
 }
 
 export async function runCli(argv = process.argv.slice(2)) {
@@ -298,7 +372,7 @@ export async function runCli(argv = process.argv.slice(2)) {
   if (command === "init" && root === pluginRoot && !rootOption) {
     throw new Error("Refusing to initialize the Mauro source repository implicitly. Pass --root explicitly to confirm this target.");
   }
-  if (command === "doctor") return doctor(root, pluginRoot, json);
+  if (command === "doctor") return doctor(root, pluginRoot, json, args);
   if (command === "tool") return toolCommand(root, args.shift(), args, json);
   if (command === "init") {
     const result = initialize(root, pluginRoot);
@@ -339,13 +413,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     return;
   }
   if (command === "pr") return prCommand(root, action || "preview", args);
-  if (command === "run") {
-    assertBranchCurrent(root, { action: "plan", allowBehind: Boolean(option(args, "--allow-behind")) });
-    const report = checkRepository(root);
-    return output({ voyage: [action, ...args].filter(Boolean).join(" ") || "status", bearing: report.current ? "current" : "needs attention", charter: report.charter.state, required: report.charter.state === "complete"
-      ? "Load the responsible Navigators and active knowledge before implementation."
-      : "Load the responsible Navigators and active knowledge before implementation. The Charter is not complete, so state in the plan that no Charter constraint was checked." }, json);
-  }
+  if (command === "run") return runCommand(root, action, args, json);
   if (command === "refit") {
     requireCharter(root, "A Refit");
     return output("A Refit is a proposal. Compare the Map with the Charter. Show moves, dependency effects, migration steps, and rollback steps. Do not move code without approval.");

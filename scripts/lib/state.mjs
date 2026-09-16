@@ -8,6 +8,7 @@ import { scanRepository } from "./inventory.mjs";
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions, validateConfig } from "./policy.mjs";
 import { navigatorIdentity, renderClaudeAgent, renderClaudeRule, renderMap, renderNavigatorBrief, slug } from "./render.mjs";
 import { loadToolGapLog } from "./tool-gaps.mjs";
+import { withProjectLock } from "./lock.mjs";
 
 export function isInitialized(root) {
   return exists(repoPath(root, PATHS.config)) && exists(repoPath(root, PATHS.map));
@@ -145,7 +146,7 @@ export function buildFingerprints(root, manifest, config, map) {
   return fingerprints;
 }
 
-export function initialize(root, pluginRoot) {
+function initializeUnlocked(root, pluginRoot) {
   if (isInitialized(root)) {
     throw new Error("Mauro is already initialized. Use `mauro map update`.");
   }
@@ -153,7 +154,7 @@ export function initialize(root, pluginRoot) {
   const configPath = repoPath(root, PATHS.config);
   const config = validateConfig(exists(configPath) ? readJson(configPath) : readJson(template(pluginRoot, "config.json")));
   const map = scanRepository(root, config);
-  for (const path of [PATHS.state, PATHS.docs, PATHS.knowledge, PATHS.navigators, PATHS.chronicles, PATHS.artifacts, PATHS.rules, PATHS.agents]) {
+  for (const path of [PATHS.state, PATHS.voyages, PATHS.docs, PATHS.knowledge, PATHS.navigators, PATHS.chronicles, PATHS.artifacts, PATHS.rules, PATHS.agents]) {
     ensureDir(repoPath(root, path));
   }
   copyTextIfMissing(template(pluginRoot, "config.json"), repoPath(root, PATHS.config));
@@ -167,6 +168,10 @@ export function initialize(root, pluginRoot) {
   writeJson(repoPath(root, PATHS.fingerprints), fingerprints);
   writeJson(repoPath(root, PATHS.changes), { schema_version: 1, paths: [] });
   return { map, manifest, fingerprints };
+}
+
+export function initialize(root, pluginRoot) {
+  return withProjectLock(root, "initialize repository", () => initializeUnlocked(root, pluginRoot));
 }
 
 function isSemanticCapability(capability) {
@@ -211,7 +216,7 @@ export function mergeCapabilities(previousCapabilities, scannedCapabilities, uni
   return merged;
 }
 
-export function updateMap(root) {
+function updateMapUnlocked(root) {
   const current = loadState(root);
   const context = verificationContext(root);
   const scanned = scanRepository(root, current.config);
@@ -258,6 +263,10 @@ export function updateMap(root) {
   };
   writeJson(repoPath(root, PATHS.fingerprints), fingerprints);
   return { map, manifest, fingerprints };
+}
+
+export function updateMap(root) {
+  return withProjectLock(root, "update Map and generated views", () => updateMapUnlocked(root));
 }
 
 export function readKnowledgeFiles(root) {

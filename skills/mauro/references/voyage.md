@@ -5,13 +5,18 @@ knowledge from the work.
 
 ## Before planning
 
-1. Run a Bearing check. `mauro run` refuses while the branch is behind its
+1. Start with `mauro run "<objective>"`. This creates a durable `planning`
+   record, assigns the Voyage ID, and returns the plan path. It does not claim
+   product-code paths.
+2. Run a Bearing check. `mauro run` refuses while the branch is behind its
    upstream and states the distance. Rebase or merge before planning, or pass
    `--allow-behind` and record the decision in the plan.
-2. Resolve relevant capabilities, paths, knowledge, and documents.
-3. Report suspect binding knowledge before implementation.
-4. Select one primary Navigator and all required reviewing Navigators.
-5. Read the Charter sections that apply to the objective. When `mauro run` reports a `template` or `partial` Charter, say so in the plan and do not invent a constraint.
+3. Resolve relevant capabilities, paths, knowledge, and documents.
+4. Report suspect binding knowledge before implementation.
+5. Select one primary Navigator and all required reviewing Navigators.
+6. Read the Charter sections that apply to the objective. When `mauro run`
+   reports a `template` or `partial` Charter, say so in the plan and do not
+   invent a constraint.
 
 ## Plan gate
 
@@ -27,6 +32,11 @@ Create small tasks with:
 
 Save the draft plan under `docs/mauro/chronicles/<voyage-id>/plan.md`.
 Record user changes and rejected plan options. Wait for approval.
+
+After approval, run `mauro run activate <voyage-id>`. When the approved scope
+differs from the prediction, pass every approved scope with repeated `--path`
+options. Do not implement before activation succeeds. Mauro refuses a scope
+that overlaps another active Voyage. Planning Voyages may overlap.
 
 ## Execute and verify
 
@@ -71,6 +81,12 @@ only records that pass.
 3. Regenerate affected Claude rules and Navigators.
 4. Run a Bearing check.
 5. Create or update the Voyage Chronicle.
-6. Report code, knowledge, document, Map, and Tool Gap changes.
+6. Run `mauro run finish <voyage-id>` to close the path lease.
+7. Report code, knowledge, document, Map, and Tool Gap changes.
+
+If the Voyage stops without completion, run
+`mauro run abandon <voyage-id> --reason "<reason>"`. Never leave an active
+lease behind. `resume <voyage-id>` records that another session continued an
+open Voyage; it does not change or duplicate the lease.
 
 Commit, push, deployment, and pull-request changes require user authorization.

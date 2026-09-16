@@ -6,6 +6,7 @@ import { charterMessage, charterState } from "./charter.mjs";
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
 import { loadState } from "./state.mjs";
 import { summarizeToolGaps } from "./tool-gaps.mjs";
+import { summarizeVoyages } from "./voyages.mjs";
 
 const TEXT_EXTENSIONS = new Set([
   ".c", ".cc", ".cpp", ".cs", ".go", ".h", ".hpp", ".java", ".js",
@@ -185,6 +186,7 @@ export function statusSummary(root) {
       stale: knowledge.filter((item) => item.status === "stale").length
     },
     tool_gaps: summarizeToolGaps(state.tool_gaps),
+    voyages: summarizeVoyages(root),
     charter: report.charter.state,
     bearing: { ok: report.ok, current: report.current, errors: report.errors, warnings: report.warnings }
   };

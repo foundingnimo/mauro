@@ -9,9 +9,12 @@ function includes(value, query) {
 
 export function pathMatches(pattern, path) {
   if (pattern === "**" || pattern === ".") return true;
+  if (pattern.endsWith("/**")) {
+    const prefix = pattern.slice(0, -3);
+    return path === prefix || path.startsWith(`${prefix}/`);
+  }
   if (/[*?]/.test(pattern)) return matchesGlob(pattern, path);
-  const prefix = pattern.replace(/\/\*\*$/, "");
-  return path === prefix || path.startsWith(`${prefix}/`);
+  return path === pattern || path.startsWith(`${pattern}/`);
 }
 
 export function matchingNavigators(state, path) {

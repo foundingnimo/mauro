@@ -26,6 +26,23 @@ validates and records them, so read-only agents do not write repository state.
 Reports from the same agent and Voyage are one observation. Repeated evidence
 promotes a gap to a candidate; it does not install or execute new code.
 
+Mauro serializes deterministic state mutations with a transient local lock in
+the host's private temporary directory. Its path contains a digest of the
+working-tree path inside a per-user namespace, so it does not alter Git state.
+One lock covers each complete multi-file mutation, not each individual file
+write. The lock records its process, host, operation, and acquisition time.
+Normal completion and handled failure remove it. A local lock whose process is
+gone is reported as stale. `mauro doctor --clear-stale-lock` removes it only
+after a second check proves that the owner process is gone.
+
+Durable Voyage records provide the second coordination layer. A planning
+record owns no code. Activation runs under the transient writer lock, compares
+the approved path patterns with every active lease, and changes the record to
+`active` only when none overlap. Completion and abandonment close the lease
+without deleting its audit evidence. This coordinates processes for one local
+user and working tree. It does not yet provide a shared lock across users,
+worktrees, or remote hosts.
+
 ### Semantic survey
 
 Read-only mapper agents identify capabilities, boundaries, entrypoints,
@@ -62,6 +79,8 @@ worktrees or clones to receive them.
 | `.mauro/config.json` | human | Scan boundaries and operating policy |
 | `.mauro/manifest.json` | generated | Knowledge, document, and Navigator index |
 | `.mauro/fingerprints.json` | generated | Evidence used for freshness checks |
+| `.mauro/voyages/*.json` | generated | Voyage lifecycle, approved scope, and active leases |
+| `.mauro/tool-gaps.json` | generated | Repeated missing Toolbox operations |
 | `docs/mauro/charter.md` | human | Intended boundaries and constraints |
 | `docs/mauro/knowledge/` | reviewed | Small active knowledge records |
 | `docs/mauro/chronicles/` | reviewed | Voyage history and detailed evidence |

@@ -16,6 +16,7 @@ export const PATHS = Object.freeze({
   fingerprints: ".mauro/fingerprints.json",
   changes: ".mauro/changed-paths.json",
   toolGaps: ".mauro/tool-gaps.json",
+  voyages: ".mauro/voyages",
   docs: "docs/mauro",
   mapDocument: "docs/mauro/map.md",
   charter: "docs/mauro/charter.md",

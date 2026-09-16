@@ -15,8 +15,8 @@ the repository is loaded as a Claude Code plugin.
 | `map` | `m` | Inspect or update the Map. |
 | `next` | `n` | List findings and suggest next steps. |
 | `pr` | `p` | Create bounded pull-request context. |
-| `run` | `r` | Start or resume a Voyage. |
-| `status` | `s` | Show Mauro state. |
+| `run` | `r` | Create or manage a Voyage and its path lease. |
+| `status` | `s` | Show Mauro state, including open Voyages. |
 | `where` | `w` | Find code and context for a concept. |
 
 The higher-frequency command gets the first-letter alias. Infrequent commands
@@ -46,6 +46,9 @@ have no one-letter alias.
 /mauro tool list
 /mauro tool run dependency-graph --unit payments --json
 /mauro tool gap list --status candidate
+/mauro r "change token rotation"
+/mauro r activate V-0001
+/mauro r status
 /mauro h knowledge
 ```
 
@@ -58,6 +61,32 @@ Mutation commands that need semantic judgment create a proposal. The skill
 shows the proposed diff before it changes a human-owned document. Pull-request
 updates, commits, pushes, deployments, and product-code moves require explicit
 authorization.
+
+## Voyages and concurrent sessions
+
+```text
+/mauro run "<objective>"
+/mauro run status [V-0001]
+/mauro run activate V-0001 [--path <approved-path>]...
+/mauro run resume V-0001
+/mauro run finish V-0001
+/mauro run abandon V-0001 --reason "<reason>"
+/mauro doctor --clear-stale-lock
+```
+
+Starting a Voyage creates a durable `planning` record in `.mauro/voyages/`
+and returns its Chronicle plan path, predicted paths, and Navigators. It does
+not reserve code paths. After the user approves the plan, `activate` claims the
+predicted paths or the explicit `--path` values. Mauro refuses overlap with an
+active Voyage. Planning Voyages may overlap.
+
+`resume` retrieves an open Voyage for another session without changing its
+lease. Only `finish` and `abandon` close a lease. Closed records retain their
+paths as history. `abandon` always requires a reason.
+
+`doctor --clear-stale-lock` removes a transient writer lock only when Mauro can
+prove that its recorded process is local and no longer exists. It refuses an
+active, remote, or unreadable lock.
 
 ## Toolbox
 

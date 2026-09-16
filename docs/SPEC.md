@@ -125,10 +125,29 @@ historical document is never reviewed.
 
 ## Voyage requirements
 
+Each Voyage has a durable ID and a machine record under `.mauro/voyages/` that
+matches `schemas/voyage.schema.json`. Its state is `planning`, `active`,
+`completed`, or `abandoned`. Creation records the Git baseline, predicted path
+scope, Navigators, Chronicle plan path, and whether the behind-branch guard was
+overridden.
+
 Run a Bearing check before planning. Resolve the primary Navigator, review
 Navigators, applicable Charter sections, and active records. The plan records
-scope and exact verification. An independent verifier checks implementation.
-The context curator proposes durable knowledge only after code verification.
+scope and exact verification. A planning Voyage has no lease and can overlap
+other plans. After user approval, activation atomically claims the predicted
+paths or explicit approved paths. An active Voyage must not overlap the path
+scope of another active Voyage. Scope matching is conservative: an uncertain
+glob overlap is an overlap.
+
+Only `finish` or `abandon` closes a lease. Abandonment requires a reason. The
+record retains its leased paths after closure as audit evidence. Mauro does not
+expire a lease by time. A session that continues an open Voyage records a
+resume event.
+
+An independent verifier checks implementation. The context curator proposes
+durable knowledge only after code verification. Complete document review,
+fingerprints, generated views, Bearing checks, and the Chronicle before marking
+the Voyage complete.
 
 ## Tool Gap requirements
 

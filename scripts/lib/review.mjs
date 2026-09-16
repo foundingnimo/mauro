@@ -6,6 +6,7 @@ import { documentDrift } from "./check.mjs";
 import { gitCommitReachable, gitDiffSince, gitHead, gitLogSince, gitUntracked } from "./git.mjs";
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
 import { loadState, verificationContext, verificationStamp } from "./state.mjs";
+import { withProjectLock } from "./lock.mjs";
 
 export const DIFF_LIMIT = 200 * 1024;
 export const COMMIT_LIMIT = 50;
@@ -80,7 +81,7 @@ export function renderReview(result) {
 // Records a review verdict of `holds`. The evidence file is the audit trail: a
 // flag that clears itself is never looked at again, so no confirmation happens
 // without a recorded review.
-export function confirmDocument(root, id, evidence) {
+function confirmDocumentUnlocked(root, id, evidence) {
   const state = loadState(root);
   const document = state.manifest.documents?.[id];
   if (!document) throw new Error(`Unknown document: ${id}`);
@@ -109,4 +110,8 @@ export function confirmDocument(root, id, evidence) {
   writeJson(repoPath(root, PATHS.fingerprints), { ...state.fingerprints, documents: { ...state.fingerprints.documents, [id]: refreshed } });
   writeJson(repoPath(root, PATHS.manifest), { ...state.manifest, documents: { ...state.manifest.documents, [id]: confirmed } });
   return { id, path: document.path, status: confirmed.status, verified_commit: confirmed.verified_commit, verified_evidence: normalized, watches: Object.keys(refreshed).length };
+}
+
+export function confirmDocument(root, id, evidence) {
+  return withProjectLock(root, "confirm document review", () => confirmDocumentUnlocked(root, id, evidence));
 }

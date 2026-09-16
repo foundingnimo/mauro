@@ -5,6 +5,8 @@ import { findProjectRoot, readJson, repoPath, toPosix, writeJson } from "./lib/f
 import { gitChangedPaths } from "./lib/git.mjs";
 import { checkRepository } from "./lib/check.mjs";
 import { isInitialized } from "./lib/state.mjs";
+import { withProjectLock } from "./lib/lock.mjs";
+import { summarizeVoyages } from "./lib/voyages.mjs";
 
 function readInput() {
   try {
@@ -16,11 +18,13 @@ function readInput() {
 }
 
 function savePaths(root, additions) {
-  const statePath = repoPath(root, PATHS.changes);
-  let current = { schema_version: 1, paths: [] };
-  try { current = readJson(statePath); } catch {}
-  const paths = [...new Set([...(current.paths || []), ...additions])].filter(Boolean).sort();
-  writeJson(statePath, { schema_version: 1, updated_at: new Date().toISOString(), paths });
+  return withProjectLock(root, "update changed-path queue", () => {
+    const statePath = repoPath(root, PATHS.changes);
+    let current = { schema_version: 1, paths: [] };
+    try { current = readJson(statePath); } catch {}
+    const paths = [...new Set([...(current.paths || []), ...additions])].filter(Boolean).sort();
+    writeJson(statePath, { schema_version: 1, updated_at: new Date().toISOString(), paths });
+  });
 }
 
 export function runHook(event, cwd = process.cwd()) {
@@ -47,6 +51,8 @@ export function runHook(event, cwd = process.cwd()) {
     const review = suspect ? ` ${suspect} document${suspect === 1 ? " is" : "s are"} suspect; run /mauro docs review.` : "";
     const navigatorCount = Object.keys(report.state.manifest.navigators || {}).length;
     const navigators = navigatorCount ? ` ${navigatorCount} project Navigator${navigatorCount === 1 ? " is" : "s are"} available; use /agents or /mauro who <path>.` : "";
-    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${charter}${review}${navigators} Run /mauro check for details.\n`);
+    const activeVoyages = summarizeVoyages(root).active;
+    const voyages = activeVoyages ? ` ${activeVoyages} active Voyage${activeVoyages === 1 ? "" : "s"}; run /mauro run status before overlapping work.` : "";
+    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${charter}${review}${navigators}${voyages} Run /mauro check for details.\n`);
   }
 }

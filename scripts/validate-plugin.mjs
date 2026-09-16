@@ -29,11 +29,14 @@ const required = [
   "bin/mauro",
   "scripts/lib/toolbox.mjs",
   "scripts/lib/tool-gaps.mjs",
+  "scripts/lib/lock.mjs",
+  "scripts/lib/voyages.mjs",
   "scripts/install-standalone-hooks.mjs",
   "schemas/map.schema.json",
   "schemas/manifest.schema.json",
   "schemas/fingerprints.schema.json",
   "schemas/tool-gaps.schema.json",
+  "schemas/voyage.schema.json",
   "schemas/config.schema.json"
 ];
 for (const path of required) if (!existsSync(join(root, path))) fail(`${path}: missing`);
@@ -52,7 +55,7 @@ for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
   if (!Array.isArray(hooks?.hooks?.[event])) fail(`hooks/hooks.json: ${event} is missing.`);
 }
 
-for (const path of ["schemas/map.schema.json", "schemas/manifest.schema.json", "schemas/fingerprints.schema.json", "schemas/tool-gaps.schema.json", "schemas/config.schema.json"]) {
+for (const path of ["schemas/map.schema.json", "schemas/manifest.schema.json", "schemas/fingerprints.schema.json", "schemas/tool-gaps.schema.json", "schemas/voyage.schema.json", "schemas/config.schema.json"]) {
   const schema = readJson(path);
   if (schema && schema.$schema !== "https://json-schema.org/draft/2020-12/schema") fail(`${path}: wrong JSON Schema version.`);
 }
