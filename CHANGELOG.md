@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1 (2026-09-17)
+
 - Treat agent instruction files as first-class, human-owned Instruction
   Contracts with configurable discovery, provider and directory scope,
   inheritance, binding fingerprints, duplicate detection, and task-brief
