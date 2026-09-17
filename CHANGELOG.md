@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 (2026-09-17)
+
 - Reframe Mauro as an ambient repository-context sidecar that coding agents
   invoke during normal work instead of a command-first human workflow.
 - Add automatic repository behavior through `mauro-context` and document its
