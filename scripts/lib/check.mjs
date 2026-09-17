@@ -1,12 +1,13 @@
 import { readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
-import { MAURO_VERSION, PATHS, SCHEMA_VERSION } from "./constants.mjs";
+import { MANIFEST_SCHEMA_VERSION, MAURO_VERSION, PATHS, SCHEMA_VERSION } from "./constants.mjs";
 import { exists, fingerprintPath, repoPath, walkFiles } from "./fs.mjs";
 import { charterMessage, charterState } from "./charter.mjs";
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
-import { loadState } from "./state.mjs";
+import { loadState, repositoryMigrationStatus } from "./state.mjs";
 import { summarizeToolGaps } from "./tool-gaps.mjs";
 import { summarizeVoyages } from "./voyages.mjs";
+import { canonicalRefStatus } from "./freshness.mjs";
 
 const TEXT_EXTENSIONS = new Set([
   ".c", ".cc", ".cpp", ".cs", ".go", ".h", ".hpp", ".java", ".js",
@@ -20,6 +21,19 @@ function finding(level, code, message, path = null) {
 
 function driftLevel(criticality) {
   return criticality === "binding" ? "error" : "warning";
+}
+
+function publicationState(state, errors, warnings) {
+  const capabilities = state.map.capabilities || [];
+  const map = capabilities.length > 0 && capabilities.every((capability) => capability.approved === true)
+    ? "published"
+    : "draft";
+  const bearing = errors > 0 ? "blocked" : warnings > 0 ? "needs-review" : "healthy";
+  return {
+    map,
+    bearing,
+    state: map === "draft" ? "draft" : bearing === "healthy" ? "published" : "published_with_findings"
+  };
 }
 
 function validateRelativePath(root, path, findings, code) {
@@ -64,6 +78,7 @@ export function documentDrift(root, state) {
 export function checkRepository(root) {
   const state = loadState(root);
   const findings = [];
+  const canonical = canonicalRefStatus(root, state.config);
   const ignoredPolicy = createGitignoredPolicy(root, state.config);
   const fingerprintOpts = fingerprintOptions(state.config, state.map, root, ignoredPolicy);
   const fingerprintExclusionPatterns = (watched = ".") => fingerprintExcludes(state.config, state.map, watched, ignoredPolicy);
@@ -76,8 +91,38 @@ export function checkRepository(root) {
   if (minor(state.map.mauro_version) !== minor(MAURO_VERSION)) {
     findings.push(finding("warning", "map-version", `Map version ${state.map.mauro_version} differs from tool version ${MAURO_VERSION}. Run \`mauro map update\`.`));
   }
-  if (state.manifest.schema_version !== SCHEMA_VERSION || state.fingerprints.schema_version !== SCHEMA_VERSION) {
+  if (state.fingerprints.schema_version !== SCHEMA_VERSION || !Number.isInteger(state.manifest.schema_version) || state.manifest.schema_version > MANIFEST_SCHEMA_VERSION || state.manifest.schema_version < 1) {
     findings.push(finding("error", "state-schema", "A Mauro state file has an unsupported schema."));
+  }
+  const migration = repositoryMigrationStatus(root);
+  if (!migration.supported) {
+    findings.push(finding("error", "migration-unsupported", `Repository context cannot be migrated automatically: ${migration.reasons.join(", ")}.`));
+  } else if (migration.required) {
+    findings.push(finding("warning", "migration-required", `Repository context needs migration to manifest schema ${MANIFEST_SCHEMA_VERSION}. Run \`mauro reconcile\`.`));
+  }
+  if (canonical.relationship === "not-git") {
+    findings.push(finding("error", "canonical-branch-unavailable", "Mauro requires a Git repository and one explicit canonical branch."));
+  } else if (canonical.relationship === "no-head") {
+    findings.push(finding("error", "canonical-branch-unavailable", "Mauro requires at least one Git commit before a canonical branch can be pinned."));
+  } else if (canonical.relationship === "unpinned") {
+    findings.push(finding("error", "canonical-branch-unpinned", "git.canonical_ref must name one exact local or remote-tracking branch. Ask the user which branch represents accepted history; do not infer it."));
+  } else if (canonical.relationship === "missing") {
+    findings.push(finding("error", "canonical-branch-missing", `Configured canonical branch ${canonical.ref} is not available locally. Fetch it or change git.canonical_ref in .mauro/config.json.`));
+  } else if (canonical.relationship === "not-branch") {
+    findings.push(finding("error", "canonical-ref-not-branch", `Configured canonical ref ${canonical.ref} does not resolve to a branch.`));
+  } else if (canonical.relationship === "symbolic") {
+    findings.push(finding("error", "canonical-branch-symbolic", `Configured canonical ref ${canonical.ref} is symbolic. Pin ${canonical.symbolic_target || "its exact target branch"} instead.`));
+  } else if (canonical.ref && ["behind", "diverged", "detached", "unknown"].includes(canonical.relationship)) {
+    const counts = canonical.behind === null ? "" : ` (${canonical.behind} behind, ${canonical.ahead} ahead)`;
+    findings.push(finding("warning", `canonical-${canonical.relationship}`, `Checkout is ${canonical.relationship} relative to canonical ${canonical.ref}${counts}. Update the branch from canonical history, or use --allow-behind deliberately.`));
+  }
+  for (const warning of state.map.instruction_file_warnings || []) {
+    findings.push(finding(
+      "warning",
+      "instruction-file-oversized",
+      `${warning.path} is ${warning.size_bytes} bytes, above the ${warning.warning_threshold_bytes}-byte host-context warning threshold. Split global rules from scoped guidance.`,
+      warning.path
+    ));
   }
   for (const capability of state.map.capabilities || []) {
     if (capability.approved !== true) {
@@ -127,7 +172,11 @@ export function checkRepository(root) {
   }
 
   for (const [id, navigator] of Object.entries(state.manifest.navigators || {})) {
-    for (const [kind, path] of [["source", navigator.source], ["agent", navigator.generated_agent], ["rule", navigator.generated_rule]]) {
+    for (const [kind, path] of [["source", navigator.source], ["Claude agent", navigator.generated_agent], ["Claude rule", navigator.generated_rule], ["portable skill", navigator.generated_skill]]) {
+      if (!path && kind === "portable skill") {
+        findings.push(finding("warning", "navigator-missing", `${id} has no portable skill registration.`));
+        continue;
+      }
       if (!validateRelativePath(root, path, findings, "navigator-path")) continue;
       if (!exists(repoPath(root, path))) {
         findings.push(finding("warning", "navigator-missing", `${id} has no ${kind} file.`, path));
@@ -161,7 +210,8 @@ export function checkRepository(root) {
   const errors = findings.filter((item) => item.level === "error").length;
   const warnings = findings.filter((item) => item.level === "warning").length;
   const information = findings.filter((item) => item.level === "information").length;
-  return { ok: errors === 0, current: errors === 0 && warnings === 0, errors, warnings, information, charter, findings, state };
+  const publication = publicationState(state, errors, warnings);
+  return { ok: errors === 0, current: errors === 0 && warnings === 0, errors, warnings, information, charter, migration, canonical, publication, findings, state };
 }
 
 export function statusSummary(root) {
@@ -171,6 +221,8 @@ export function statusSummary(root) {
   return {
     initialized: true,
     mode: state.config.mode,
+    publication: report.publication,
+    git: report.canonical,
     baseline: state.map.baseline,
     files: state.map.files.length,
     units: state.map.units.length,

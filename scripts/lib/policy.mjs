@@ -57,9 +57,22 @@ function rolePolicyAt(value, path) {
 
 export function validateConfig(config) {
   const root = objectAt(config, "configuration");
-  keysAt(root, ["schema_version", "mode", "scan", "pull_request"], "configuration");
+  keysAt(root, ["schema_version", "mode", "git", "scan", "pull_request"], "configuration");
   if (root.schema_version !== 1) invalid("schema_version must be 1.");
   if (!MAURO_MODES.has(root.mode)) invalid("mode must be observe, advise, maintain, or enforce.");
+  if (root.git !== undefined) {
+    const git = objectAt(root.git, "git");
+    keysAt(git, ["canonical_ref"], "git");
+    const ref = git.canonical_ref;
+    if (ref !== null && (typeof ref !== "string" || !ref.length || ref.length > 200)) invalid("git.canonical_ref must be null or a string of 1 to 200 characters.");
+    if (typeof ref === "string") {
+      const components = ref.split("/");
+      const pseudoRef = new Set(["HEAD", "FETCH_HEAD", "ORIG_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_HEAD", "AUTO_MERGE"]);
+      if (ref === "@" || pseudoRef.has(ref) || ref.startsWith("-") || /[\s\\~^:?*\[\]]/.test(ref) || ref.includes("..") || ref.includes("@{") || ref.includes("//") || ref.endsWith("/") || ref.endsWith(".") || components.some((component) => !component || component.startsWith(".") || component.endsWith(".lock"))) {
+        invalid("git.canonical_ref is not a safe Git ref name.");
+      }
+    }
+  }
   const scan = objectAt(root.scan, "scan");
   keysAt(scan, ["packages", "package_overrides", "tests", "fixtures", "generated", "documents", "gitignored", "paths", "languages", "max_file_size", "follow_symlinks", "full_expedition_move_threshold"], "scan");
   const packages = objectAt(scan.packages, "scan.packages");

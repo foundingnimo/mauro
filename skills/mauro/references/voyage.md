@@ -8,9 +8,11 @@ knowledge from the work.
 1. Start with `mauro run "<objective>"`. This creates a durable `planning`
    record, assigns the Voyage ID, and returns the plan path. It does not claim
    product-code paths.
-2. Run a Bearing check. `mauro run` refuses while the branch is behind its
-   upstream and states the distance. Rebase or merge before planning, or pass
-   `--allow-behind` and record the decision in the plan.
+2. Run a Bearing check. `mauro run` compares HEAD with the user-selected
+   canonical branch. An unpinned or invalid branch blocks the Voyage and cannot
+   be overridden. For detached, behind, or diverged checkout state, update the
+   branch before planning or pass `--allow-behind` and record the ref, commit,
+   relationship, and decision in the plan.
 3. Resolve relevant capabilities, paths, knowledge, and documents.
 4. Report suspect binding knowledge before implementation.
 5. Select one primary Navigator and all required reviewing Navigators.
@@ -37,13 +39,15 @@ After approval, run `mauro run activate <voyage-id>`. When the approved scope
 differs from the prediction, pass every approved scope with repeated `--path`
 options. Do not implement before activation succeeds. Mauro refuses a scope
 that overlaps another active Voyage. Planning Voyages may overlap.
+Activation, resume, and finish recheck the canonical relationship because
+accepted history can move after planning. They do not fetch or modify Git.
 
 ## Execute and verify
 
 For each task:
 
-1. Ask the primary Navigator to scope the implementation. The parent Claude
-   Code session implements it because generated Navigators are read-only.
+1. Ask the primary Navigator to scope the implementation. The host coding-agent
+   session implements it because generated Navigators are read-only.
 2. Capture concise decisions, failed attempts, constraints, and rejected
    alternatives in structured output.
 3. Ask the primary Navigator and an independent verifier to inspect the code.
@@ -78,7 +82,7 @@ only records that pass.
 1. Run the document review for each document that the Voyage made suspect.
    See `maintenance.md`, section "Document review".
 2. Update fingerprints.
-3. Regenerate affected Claude rules and Navigators.
+3. Regenerate affected host rules, skills, and Navigators.
 4. Run a Bearing check.
 5. Create or update the Voyage Chronicle.
 6. Run `mauro run finish <voyage-id>` to close the path lease.

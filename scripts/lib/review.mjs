@@ -7,6 +7,7 @@ import { gitCommitReachable, gitDiffSince, gitHead, gitLogSince, gitUntracked } 
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
 import { loadState, verificationContext, verificationStamp } from "./state.mjs";
 import { withProjectLock } from "./lock.mjs";
+import { assertCanonicalCurrent, canonicalRefStatus } from "./freshness.mjs";
 
 export const DIFF_LIMIT = 200 * 1024;
 export const COMMIT_LIMIT = 50;
@@ -62,7 +63,11 @@ export function reviewPackets(root, { id = null } = {}) {
     .filter(([key]) => !id || key === id)
     .filter(([, document]) => !isHistorical(document))
     .filter(([key, document]) => drift[key].changed.length > 0 || document.status === "suspect" || document.status === "stale");
-  return { head: gitHead(root), documents: selected.map(([key, document]) => packet(root, key, document, drift[key])) };
+  return {
+    head: gitHead(root),
+    canonical: canonicalRefStatus(root, state.config),
+    documents: selected.map(([key, document]) => packet(root, key, document, drift[key]))
+  };
 }
 
 export function renderReview(result) {
@@ -81,8 +86,9 @@ export function renderReview(result) {
 // Records a review verdict of `holds`. The evidence file is the audit trail: a
 // flag that clears itself is never looked at again, so no confirmation happens
 // without a recorded review.
-function confirmDocumentUnlocked(root, id, evidence) {
+function confirmDocumentUnlocked(root, id, evidence, { allowBehind = false } = {}) {
   const state = loadState(root);
+  assertCanonicalCurrent(root, { config: state.config, action: "document confirmation", allowBehind });
   const document = state.manifest.documents?.[id];
   if (!document) throw new Error(`Unknown document: ${id}`);
   if (isHistorical(document)) throw new Error(`${id} is historical. A historical document is never reviewed or confirmed.`);
@@ -112,6 +118,6 @@ function confirmDocumentUnlocked(root, id, evidence) {
   return { id, path: document.path, status: confirmed.status, verified_commit: confirmed.verified_commit, verified_evidence: normalized, watches: Object.keys(refreshed).length };
 }
 
-export function confirmDocument(root, id, evidence) {
-  return withProjectLock(root, "confirm document review", () => confirmDocumentUnlocked(root, id, evidence));
+export function confirmDocument(root, id, evidence, options = {}) {
+  return withProjectLock(root, "confirm document review", () => confirmDocumentUnlocked(root, id, evidence, options));
 }

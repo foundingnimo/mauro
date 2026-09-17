@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
 import { PATHS } from "./lib/constants.mjs";
 import { findProjectRoot, readJson, repoPath, toPosix, writeJson } from "./lib/fs.mjs";
 import { gitChangedPaths } from "./lib/git.mjs";
 import { checkRepository } from "./lib/check.mjs";
-import { isInitialized } from "./lib/state.mjs";
+import { isInitialized, reconcile } from "./lib/state.mjs";
 import { withProjectLock } from "./lib/lock.mjs";
 import { summarizeVoyages } from "./lib/voyages.mjs";
 
@@ -34,18 +34,25 @@ export function runHook(event, cwd = process.cwd()) {
     const input = readInput();
     const candidate = input.tool_input?.file_path || input.tool_input?.path || input.file_path;
     if (candidate) {
-      const path = isAbsolute(candidate) ? toPosix(relative(root, candidate)) : toPosix(candidate);
+      let canonical = candidate;
+      if (isAbsolute(candidate)) {
+        try { canonical = realpathSync(candidate); } catch {}
+      }
+      const path = isAbsolute(canonical) ? toPosix(relative(root, canonical)) : toPosix(canonical);
       if (path && !path.startsWith("../")) savePaths(root, [path]);
     }
     return;
   }
   if (event === "stop") {
-    savePaths(root, gitChangedPaths(root));
+    reconcile(root, { observedPaths: gitChangedPaths(root) });
     return;
   }
   if (event === "session-start") {
+    const refreshed = reconcile(root, { observedPaths: gitChangedPaths(root) });
     const report = checkRepository(root);
     const label = report.current ? "current" : "needs attention";
+    const canonical = report.findings.find((item) => item.code.startsWith("canonical-") && item.level === "error");
+    const canonicalNote = canonical ? ` ${canonical.message}` : "";
     const charter = report.charter.state === "complete" ? "" : ` The Charter is ${report.charter.state === "partial" ? "partial" : report.charter.state}; run /mauro charter ${report.charter.state === "partial" ? "update" : "create"}.`;
     const suspect = new Set(report.findings.filter((item) => item.code === "document-suspect").map((item) => item.path)).size;
     const review = suspect ? ` ${suspect} document${suspect === 1 ? " is" : "s are"} suspect; run /mauro docs review.` : "";
@@ -53,6 +60,7 @@ export function runHook(event, cwd = process.cwd()) {
     const navigators = navigatorCount ? ` ${navigatorCount} project Navigator${navigatorCount === 1 ? " is" : "s are"} available; use /agents or /mauro who <path>.` : "";
     const activeVoyages = summarizeVoyages(root).active;
     const voyages = activeVoyages ? ` ${activeVoyages} active Voyage${activeVoyages === 1 ? "" : "s"}; run /mauro run status before overlapping work.` : "";
-    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${charter}${review}${navigators}${voyages} Run /mauro check for details.\n`);
+    const refresh = refreshed.updated ? ` Repository context refreshed from ${refreshed.paths.length} changed path${refreshed.paths.length === 1 ? "" : "s"}.` : "";
+    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${canonicalNote}${refresh}${charter}${review}${navigators}${voyages} Run /mauro check for details.\n`);
   }
 }

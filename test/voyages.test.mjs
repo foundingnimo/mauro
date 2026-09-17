@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { afterEach, beforeEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { normalizeVoyagePath, voyagePathsOverlap } from "../scripts/lib/voyages.mjs";
+import { normalizeVoyagePath, validateVoyage, voyagePathsOverlap } from "../scripts/lib/voyages.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixture = join(packageRoot, "test/fixtures/monorepo");
@@ -38,13 +38,22 @@ function commitAll(message) {
   return git("rev-parse", "HEAD");
 }
 
+function configureCanonical(ref) {
+  const path = join(sandbox, ".mauro/config.json");
+  const config = JSON.parse(readFileSync(path, "utf8"));
+  config.git = { canonical_ref: ref };
+  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+}
+
 beforeEach(() => {
   sandbox = mkdtempSync(join(tmpdir(), "mauro-voyage-"));
   cpSync(fixture, sandbox, { recursive: true });
   git("init", "--quiet");
   commitAll("fixture");
-  ok("init", "--root", sandbox);
+  git("branch", "canonical");
+  ok("init", "--canonical-ref", "canonical", "--root", sandbox);
   commitAll("initialize Mauro");
+  git("branch", "-f", "canonical", "HEAD");
 });
 
 afterEach(() => {
@@ -60,6 +69,8 @@ test("starting a Voyage creates a durable planning record with predicted scope",
   assert.equal(voyage.status, "planning");
   assert.equal(voyage.baseline.commit, head);
   assert.equal(voyage.baseline.dirty, false);
+  assert.equal(voyage.baseline.canonical_ref, "canonical");
+  assert.equal(voyage.baseline.canonical_commit, head);
   assert.deepEqual(voyage.proposed_paths, ["packages/auth/**"]);
   assert.ok(voyage.navigators.some((name) => name.toLowerCase().includes("auth")));
   assert.equal(voyage.plan_path, "docs/mauro/chronicles/V-0001/plan.md");
@@ -72,6 +83,31 @@ test("starting a Voyage creates a durable planning record with predicted scope",
   const status = json("run", "status");
   assert.equal(status.summary.planning, 2);
   assert.deepEqual(status.voyages.map((item) => item.id), ["V-0001", "V-0002"]);
+
+  const legacy = structuredClone(voyage);
+  delete legacy.baseline.canonical_ref;
+  delete legacy.baseline.canonical_commit;
+  assert.doesNotThrow(() => validateVoyage(legacy));
+});
+
+test("Voyages record canonical evidence and guard later lifecycle changes", () => {
+  configureCanonical("base");
+  commitAll("configure canonical history");
+  git("branch", "base");
+  const head = git("rev-parse", "HEAD");
+  const voyage = json("run", "Change auth token lifecycle").voyage;
+  assert.equal(voyage.baseline.canonical_ref, "base");
+  assert.equal(voyage.baseline.canonical_commit, head);
+  json("run", "activate", voyage.id);
+
+  const canonicalCommit = git("commit-tree", `${head}^{tree}`, "-p", head, "-m", "Canonical advanced");
+  git("update-ref", "refs/heads/base", canonicalCommit);
+  const refused = run("run", "finish", voyage.id, "--root", sandbox);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /canonical branch base: 1 commit behind/);
+  const finished = json("run", "finish", voyage.id, "--allow-behind").voyage;
+  assert.equal(finished.status, "completed");
+  assert.equal(finished.allow_behind, true);
 });
 
 test("activation follows plan approval and lifecycle commands release the lease", () => {

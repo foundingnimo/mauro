@@ -1,6 +1,6 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
-import { MAURO_VERSION, MANIFEST_FILES, MAX_PERIMETER_REGIONS, SCHEMA_VERSION } from "./constants.mjs";
+import { INSTRUCTION_FILE_WARNING_BYTES, MAURO_VERSION, MANIFEST_FILES, MAX_PERIMETER_REGIONS, SCHEMA_VERSION } from "./constants.mjs";
 import { fileName, fingerprintFile, repoPath, toPosix, walkFiles } from "./fs.mjs";
 import { gitBaseline } from "./git.mjs";
 import {
@@ -18,6 +18,20 @@ import {
 } from "./policy.mjs";
 
 const REVIEWABLE_IGNORED_PATH = /(^|\/)(adr|architecture|design|docs?|examples?|infra|schemas?|stories|storybook)(\/|$)/i;
+const INSTRUCTION_FILE_NAMES = new Set(["AGENTS.md", "CLAUDE.md"]);
+
+function instructionFileWarnings(root, paths) {
+  return paths
+    .filter((path) => INSTRUCTION_FILE_NAMES.has(fileName(path)))
+    .map((path) => ({ path, size_bytes: statSync(repoPath(root, path)).size }))
+    .filter((file) => file.size_bytes > INSTRUCTION_FILE_WARNING_BYTES)
+    .map((file) => ({
+      ...file,
+      warning_threshold_bytes: INSTRUCTION_FILE_WARNING_BYTES,
+      reason: "host-context-limit"
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+}
 
 function boundaryClassification(path, kind, config) {
   const probe = kind === "directory" ? `${path}/__mauro_boundary__` : path;
@@ -221,6 +235,7 @@ export function scanRepository(root, config = {}) {
       }
     }
   );
+  const instructionWarnings = instructionFileWarnings(root, candidatePaths);
   let allUnits = groupedManifestUnits(root, candidatePaths, config);
   if (allUnits.length === 0) allUnits = fallbackUnits(candidatePaths, config);
   const visibleUnits = allUnits.filter((unit) => unit.scope !== "omit");
@@ -374,8 +389,10 @@ export function scanRepository(root, config = {}) {
       gitignored_regions: ignoredPolicy.regions.length,
       gitignored_scanned_files: gitignoredScannedFiles,
       hidden_ignored_regions: hiddenIgnoredRegions,
-      review_required_regions: reviewRequiredRegions.length
+      review_required_regions: reviewRequiredRegions.length,
+      instruction_file_warnings: instructionWarnings.length
     },
+    instruction_file_warnings: instructionWarnings,
     perimeter_regions: perimeterRegions,
     files,
     units,

@@ -1,7 +1,8 @@
 # Mauro architecture
 
-Mauro separates evidence, meaning, and generated context. This separation
-keeps the repository useful when one Claude session ends.
+Mauro separates evidence, meaning, and generated host adapters. This separation
+keeps the repository useful when one coding-agent session ends or the team
+changes agent providers.
 
 ## Layers
 
@@ -13,6 +14,11 @@ duplicates, records Git state, computes SHA-256 fingerprints, resolves
 pointers, and checks generated files. The core does not need a network or an
 AI provider. A validated scan policy controls package scope and file roles
 before semantic agents receive evidence.
+
+The perimeter preflight also records oversized `AGENTS.md` and `CLAUDE.md`
+files. It uses a conservative byte threshold and reports the paths before
+semantic surveys because a host can truncate or reject oversized instruction
+context. This is a warning, not a scan exclusion.
 
 The built-in Toolbox exposes recurring deterministic analysis through the
 Mauro CLI. Each registered tool declares structured inputs, structured output,
@@ -43,6 +49,14 @@ without deleting its audit evidence. This coordinates processes for one local
 user and working tree. It does not yet provide a shared lock across users,
 worktrees, or remote hosts.
 
+The canonical-ref guard is a separate Git safety layer. Initialization asks a
+person to select one exact local or remote-tracking branch for accepted
+history. The core rejects `null`, tags, missing branches, and symbolic aliases.
+It compares the pinned branch with HEAD and reports current, ahead, behind,
+diverged, detached, missing, or unpinned state. It never performs a network or
+working-tree operation. An explicit override can accept checkout drift, but it
+cannot replace the required branch choice.
+
 ### Semantic survey
 
 Read-only mapper agents identify capabilities, boundaries, entrypoints,
@@ -57,18 +71,26 @@ approves capability boundaries and ownership before they become authoritative.
 
 ### Generated views
 
-Mauro generates path-scoped rules and Claude project agents from mapped
-sources. Generated views contain source pointers. They are not independent
-knowledge stores. Claude Code discovers the generated agents in
-`.claude/agents/` by walking up from a session's working directory. The agent
-description names its capability and primary paths so a parent session can
-delegate relevant ticket scoping and review. Generated Navigators are
-read-only; the parent session implements product changes.
+Mauro generates host adapters from mapped sources. Generated views contain
+source pointers. They are not independent knowledge stores. Claude Code gets
+path-scoped rules and project agents in `.claude/`. Agents that implement the
+common `SKILL.md` convention get portable Navigator skills in
+`.agents/skills/`. Each description names its capability and primary paths so
+the host session can select relevant ticket scoping and review. Generated
+Navigators are read-only; the host coding agent implements product changes.
 
-Claude Code loads agents at session start. A session that was already open
-when Mauro initialized, updated the Map, or regenerated Navigators must restart
-before it can use the changed definitions. Teams commit the generated agent
-files and their canonical Map and Navigator sources when they want other
+The installed host surface has two skills with separate activation rules.
+`mauro-context` is eligible for automatic use during repository work. `mauro`
+has implicit invocation disabled and handles only explicit administration.
+Standalone installation keeps the runtime at `~/.mauro`; Claude and shared
+skill directories are adapters around that one runtime. The former
+`~/.claude/mauro` runtime is a supported upgrade source, not the current
+installation target.
+
+Some hosts cache agents or skills at session start. A session that was already
+open when Mauro initialized, updated the Map, or regenerated Navigators can
+need a restart before it uses changed definitions. Teams commit the generated
+views and their canonical Map and Navigator sources when they want other
 worktrees or clones to receive them.
 
 ## Durable state
@@ -76,9 +98,11 @@ worktrees or clones to receive them.
 | Location | Ownership | Purpose |
 |---|---|---|
 | `.mauro/map.json` | generated | Observed structure and evidence |
-| `.mauro/config.json` | human | Scan boundaries and operating policy |
+| `.mauro/config.json` | human | Scan boundaries, canonical ref, and operating policy |
 | `.mauro/manifest.json` | generated | Knowledge, document, and Navigator index |
 | `.mauro/fingerprints.json` | generated | Evidence used for freshness checks |
+| `.mauro/changed-paths.json` | generated | Pending evidence paths from host hooks |
+| `.mauro/reconciliation.json` | generated | Signature of the last reconciled working tree |
 | `.mauro/voyages/*.json` | generated | Voyage lifecycle, approved scope, and active leases |
 | `.mauro/tool-gaps.json` | generated | Repeated missing Toolbox operations |
 | `docs/mauro/charter.md` | human | Intended boundaries and constraints |
@@ -86,6 +110,12 @@ worktrees or clones to receive them.
 | `docs/mauro/chronicles/` | reviewed | Voyage history and detailed evidence |
 | `.claude/rules/mauro/` | generated | Path-scoped Claude context |
 | `.claude/agents/` | generated | Project Navigator definitions |
+| `.agents/skills/` | generated | Provider-neutral Navigator skills |
+
+The manifest has its own schema version because generated host views can
+change without changing the Map. Reconciliation upgrades a supported older
+manifest and regenerates missing derived views even when repository evidence
+did not change. Mauro refuses an unknown future schema instead of rewriting it.
 
 ## Freshness model
 
@@ -111,12 +141,23 @@ Document criticality controls the response:
 A stale document that only restates code is deleted, not corrected. Code wins.
 A document that holds a decision, a rule, or intended state is corrected.
 
+Map publication is independent from Bearing health. An approved semantic Map
+can remain useful while existing binding documents are stale. Status reports
+the Map as `published_with_findings` and the Bearing as blocked until those
+documents are reviewed. A draft Map is never reported as published.
+
 `advise` mode reports warnings without failing a command. `enforce` mode makes
 warnings fail the Bearing check.
 
-Plugin hooks run from the packaged `hooks/hooks.json`. The standalone installer
-merges equivalent hooks into the user settings file and creates a backup. All
-hooks return immediately in repositories that do not use Mauro.
+Claude plugin hooks run from the packaged `hooks/hooks.json`. The standalone
+installer merges equivalent hooks into the user settings file and creates a
+backup. An update removes old Mauro-owned hook commands and installs one hook
+per event for the current neutral runtime; unrelated settings and hooks stay.
+All hooks return immediately in repositories that do not use Mauro.
+At session start and stop, a hook reconciles changed evidence only when its
+path-and-content signature differs from the previous reconciliation. Hosts
+without Mauro lifecycle hooks follow the same operation through the ambient
+skill at task boundaries.
 
 Each document records its verification commit: the Git commit that its
 fingerprints describe. The fingerprints decide which documents need a review.
@@ -127,6 +168,11 @@ paths. A missing or unreachable commit gives a full review. The
 the document still holds, `mauro docs confirm` refreshes the fingerprints and
 records HEAD as the new verification commit. The confirmation needs a Chronicle
 file that records the review.
+
+Review packets also record the resolved canonical ref and commit. Voyage
+baselines preserve the same pair, so another session can identify the accepted
+history used when planning started. These are local observations; Mauro does
+not claim that a remote-tracking ref is network-current.
 
 ## Update levels
 

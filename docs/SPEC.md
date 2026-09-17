@@ -2,7 +2,7 @@
 
 ## Objective
 
-Mauro gives Claude Code durable, scoped, and verifiable repository context.
+Mauro gives coding agents durable, scoped, and verifiable repository context.
 It is optimized for monorepos where directory structure, code ownership,
 documentation, and business capabilities can disagree.
 
@@ -19,25 +19,68 @@ documentation, and business capabilities can disagree.
 - A **Chronicle** stores detailed history that does not belong in active context.
 - The **Toolbox** is Mauro's registry of trusted reusable operations.
 - A **Tool Gap** records a recurring operation that the Toolbox does not provide.
+- A **Brief** is deterministic, bounded task context for a host coding agent.
+- **Reconciliation** refreshes derived context after repository evidence changes.
+
+## Ambient operation requirements
+
+The host agent invokes Mauro as part of normal repository work. A person does
+not need to translate a ticket into a Mauro command. Before substantial work,
+the agent initializes Mauro when necessary, reconciles changed evidence, builds
+a Brief for the objective, and reads the relevant Navigators, Charter, and
+active knowledge. Routine success stays quiet. Conflicts, suspect context,
+preliminary boundaries, and required approvals remain visible.
+
+Reconciliation can update machine state, the observed Map, generated
+Navigator views, and freshness findings. It does not change product code or
+human-owned intent. Changes to the Charter, curated knowledge, capability
+boundaries, repository structure, pull requests, commits, pushes, or deploys
+stay behind explicit human approval.
+
+Canonical state is provider-neutral. A host adapter can add discovery, hooks,
+or delegation behavior, but must not change the meaning of that state. Claude
+Code uses `.claude/` views. Compatible agents use `.agents/skills/` views.
+
+The installed skill identities must not overlap. `mauro-context` is eligible
+for automatic invocation during ordinary repository work. `mauro` is eligible
+only after an explicit user command. A standalone runtime lives outside any
+provider directory. Host profiles install adapters without forking canonical
+state or deterministic behavior.
+
+A supported older repository-state schema is upgraded by reconciliation before
+normal freshness decisions. Migration regenerates derived views and preserves
+human-owned intent and curated knowledge. An unreadable or future schema stops
+automatic migration and requires a newer tool or manual recovery.
 
 ## Expedition requirements
 
 1. Record the Git baseline and dirty-tree state.
 2. Inventory source, tests, documents, manifests, and exact duplicates.
-3. Use independent read-only surveys for structure, capabilities, documents,
+3. Report `AGENTS.md` and `CLAUDE.md` files above the conservative host-context
+   threshold before semantic surveys. The warning does not block the scan.
+4. Use independent read-only surveys for structure, capabilities, documents,
    and duplication.
-4. Cite file or test evidence for semantic claims.
-5. State confidence for inferred relationships.
-6. Keep the Map separate from the Charter.
-7. Show unresolved ownership and contradictory evidence.
-8. Ask a person to approve semantic boundaries.
-9. Generate scoped Navigators and rules from approved sources.
-10. Do not modify product code or add inline markers during initialization.
+5. Cite file or test evidence for semantic claims.
+6. State confidence for inferred relationships.
+7. Keep the Map separate from the Charter.
+8. Show unresolved ownership and contradictory evidence.
+9. Ask a person to approve semantic boundaries.
+10. Generate scoped Navigators and rules from approved sources.
+11. Do not modify product code or add inline markers during initialization.
 
 ## Scan configuration
 
 Mauro reads `.mauro/config.json` before an Expedition or Map update. The file
 must match `schemas/config.schema.json`. Invalid configuration stops the scan.
+
+`git.canonical_ref` names the exact local or remote-tracking branch that the
+user selected as accepted repository history. Initialization must list
+available branches, ask the user, and record the answer before scanning. It
+must not infer the choice from the current branch, `origin/HEAD`, `main`, or
+`master`. `null`, a tag, a missing branch, and a symbolic alias are errors.
+Mauro does not contact a remote, fetch, switch, merge, or rebase. Status
+reports the branch, HEAD, canonical commit, dirty state, ahead/behind counts,
+and relationship.
 
 Package selectors use package names and repository-relative paths. An empty
 include selector includes all packages. Exclude selectors take precedence over
@@ -51,6 +94,10 @@ Evidence mode permits a file to support a claim. Evidence-mode files cannot
 define a capability or create duplication and Refit findings. Package overrides
 take precedence over the global role mode. A configured pattern array replaces
 the default array.
+
+The default generated patterns do not include `vendor/` or `build/`. Those
+names are ambiguous across repositories. A repository can add exact patterns
+after it verifies that the matching content is generated output.
 
 Git-ignored paths use a separate policy. `record` is the default: Mauro records
 the region boundary but does not enumerate or read its contents. `scan` permits
@@ -66,7 +113,7 @@ Mauro applies scan policy in this order:
 1. A lightweight perimeter census identifies excluded and Git-ignored regions.
    It does not read record-only contents.
 2. Non-configurable safety exclusions block Git data, Mauro state, generated
-   Claude views, dependencies, common secret files, keys, and logs.
+   generated agent views, dependencies, common secret files, keys, and logs.
 3. Git-ignored policy decides whether ignored content stays record-only or can
    enter the content scan.
 4. Package include and exclude selectors set unit scope.
@@ -101,8 +148,8 @@ Each record has one of these states: `draft`, `active`, `suspect`, `stale`,
 
 ## Pointer requirements
 
-The manifest is the default link between code and knowledge. Generated Claude
-rules load applicable context by path. An inline pointer is optional:
+The manifest is the default link between code and knowledge. Generated host
+rules and skills load applicable context by path. An inline pointer is optional:
 
 ```text
 MAURO[K-0001]: Keep token rotation atomic.
@@ -127,9 +174,17 @@ historical document is never reviewed.
 
 Each Voyage has a durable ID and a machine record under `.mauro/voyages/` that
 matches `schemas/voyage.schema.json`. Its state is `planning`, `active`,
-`completed`, or `abandoned`. Creation records the Git baseline, predicted path
-scope, Navigators, Chronicle plan path, and whether the behind-branch guard was
-overridden.
+`completed`, or `abandoned`. Creation records the Git baseline, canonical ref
+and commit, predicted path scope, Navigators, Chronicle plan path, and whether
+the canonical-ref guard was overridden.
+
+Voyage planning, activation, resumption, and completion refuse an unpinned,
+missing, non-branch, or symbolic canonical ref. These states cannot be
+overridden. Document review and confirmation use the same guard. A detached,
+behind, or diverged checkout can continue with explicit `--allow-behind`; the
+override is recorded for a Voyage. A local branch that is level with or ahead
+of canonical history is allowed. The guard does not modify Git or prove that a
+remote-tracking branch is current on the network.
 
 Run a Bearing check before planning. Resolve the primary Navigator, review
 Navigators, applicable Charter sections, and active records. The plan records
@@ -182,4 +237,6 @@ duplication from similar code that has different semantics.
 
 A Mauro operation reports its outcome, changed files, checked evidence,
 suspect knowledge, and required human decisions. It must not claim success when
-required verification fails.
+required verification fails. Map publication and Bearing health are separate.
+An approved Map can be `published_with_findings` while the Bearing is blocked
+or needs review. The operation must state both conditions.

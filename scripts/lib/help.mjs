@@ -1,21 +1,23 @@
 import { ALIASES, PUBLIC_COMMANDS } from "./constants.mjs";
 
 const DETAILS = {
+  brief: "Build compact implementation context for an objective without starting a Voyage.",
   charter: "Create, show, update, diff, or validate the human-owned Charter. `validate` reports template, partial, or complete.",
   check: "Run a read-only Bearing check for stale knowledge and generated context.",
   docs: "Show document state, run freshness checks, build review packets for suspect documents, or confirm a reviewed document.",
   doctor: "Validate the Mauro installation and project state, or safely clear a proven stale local lock.",
   help: "Show general help or help for one command.",
   impact: "Find likely capabilities and Navigators for a proposed change.",
-  init: "Run the first Expedition. Create the Map, Charter, and Navigators.",
+  init: "Pin the user-selected canonical branch, then run the first Expedition.",
   knowledge: "Show, search, propose, verify, update, or retire Logbook records.",
   map: "Show, find, update, or verify the observed repository Map.",
   navigator: "List, show, regenerate, or request a specialist review.",
   next: "List what Mauro found and suggest the next steps, each with its command.",
   pr: "Preview, check, or update bounded pull-request context.",
+  reconcile: "Refresh derived repository context when observed files changed.",
   refit: "Propose a repository reorganization. This command does not move code.",
   run: "Create, activate, resume, finish, abandon, or inspect a development Voyage.",
-  status: "Show initialization, Map, knowledge, Voyage, and Bearing state.",
+  status: "Show Map publication, Bearing health, initialization, knowledge, and Voyage state.",
   tool: "List, describe, or run a trusted tool, and maintain the project Tool Gap Log.",
   where: "Find code, documents, and knowledge for a concept.",
   who: "Find the responsible Navigator for a path.",
@@ -23,20 +25,22 @@ const DETAILS = {
 };
 
 const USAGE = {
+  brief: "mauro brief <objective> [--json]",
   charter: "mauro charter <create|show|update|diff|validate>",
   check: "mauro check [--json]",
-  docs: "mauro docs <status|check|review [id] [--allow-behind]|confirm <id> --evidence <file>> [--json]",
+  docs: "mauro docs <status|check|review [id] [--allow-behind]|confirm <id> --evidence <file> [--allow-behind]> [--json]",
   doctor: "mauro doctor [--clear-stale-lock]",
   help: "mauro help [command]",
   impact: "mauro impact <proposed change>",
-  init: "mauro init [--root <repository>]",
+  init: "mauro init --canonical-ref <branch> [--root <repository>]",
   knowledge: "mauro knowledge <show|search|propose|verify|update|retire|history> [value]",
   map: "mauro map <show|find|update|verify> [value]",
   next: "mauro next [--json]",
   navigator: "mauro navigator <list|show|regenerate|review> [value]",
   pr: "mauro pr <preview|check|update|reviewers> [--base <ref>]",
+  reconcile: "mauro reconcile [--force] [--json]",
   refit: "mauro refit propose [scope]",
-  run: "mauro run <objective> [--allow-behind] | status [id] | activate <id> [--path <path>]... | resume <id> | finish <id> | abandon <id> --reason <reason>",
+  run: "mauro run <objective> [--allow-behind] | status [id] | activate <id> [--path <path>]... [--allow-behind] | resume <id> [--allow-behind] | finish <id> [--allow-behind] | abandon <id> --reason <reason>",
   status: "mauro status [--json]",
   tool: "mauro tool <list|describe|run|gaps|gap> [action] [--json]",
   where: "mauro where <concept>",
@@ -50,7 +54,7 @@ export function help(command = null) {
   }
   const aliases = Object.entries(ALIASES).map(([alias, name]) => `${alias}=${name}`).join(", ");
   const lines = [
-    "Mauro maps a repository and maintains verified context for Claude Code.",
+    "Mauro maps a repository and maintains verified context for coding agents.",
     "",
     "Usage: mauro <command> [arguments] [--root <repository>]",
     "",

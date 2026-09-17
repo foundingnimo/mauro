@@ -1,5 +1,5 @@
 {
-  "description": "Keep Mauro repository context current between Claude Code sessions.",
+  "description": "Reconcile Mauro repository context at Claude Code lifecycle boundaries.",
   "hooks": {
     "SessionStart": [
       {
@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/mauro\" hook session-start",
-            "timeout": 20
+            "timeout": 120
           }
         ]
       }
@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/mauro\" hook stop",
-            "timeout": 20
+            "timeout": 120
           }
         ]
       }

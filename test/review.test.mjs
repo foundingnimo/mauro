@@ -36,12 +36,23 @@ function commitAll(message) {
   return git("rev-parse", "HEAD");
 }
 
+function initializeCanonical(ref = "canonical") {
+  git("branch", ref);
+  return ok("init", "--canonical-ref", ref, "--root", sandbox);
+}
+
 function readState(name) {
   return JSON.parse(readFileSync(join(sandbox, ".mauro", name), "utf8"));
 }
 
 function writeState(name, value) {
   writeFileSync(join(sandbox, ".mauro", name), `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function configureCanonical(ref) {
+  const config = readState("config.json");
+  config.git = { canonical_ref: ref };
+  writeState("config.json", config);
 }
 
 function addDocument(id, document) {
@@ -85,7 +96,7 @@ test("a stamp is dirty only when a changed path falls inside a watch", () => {
 test("init stamps every document with the commit its fingerprints describe", () => {
   git("init", "--quiet");
   const head = commitAll("fixture");
-  ok("init", "--root", sandbox);
+  initializeCanonical();
   const { documents } = readState("manifest.json");
   assert.ok(Object.keys(documents).length > 1);
   for (const [id, document] of Object.entries(documents)) {
@@ -99,7 +110,7 @@ test("init stamps every document with the commit its fingerprints describe", () 
 test("map update stamps only what it fingerprints afresh", () => {
   git("init", "--quiet");
   const first = commitAll("fixture");
-  ok("init", "--root", sandbox);
+  initializeCanonical();
   commitAll("mauro state");
   writeFileSync(join(sandbox, "docs/guide.md"), "# Guide\n");
   addDocument("doc-guide", { path: "docs/guide.md", watches: ["packages/auth/src"] });
@@ -128,7 +139,7 @@ function reviewJson(...args) {
 function guidedRepository() {
   git("init", "--quiet");
   commitAll("fixture");
-  ok("init", "--root", sandbox);
+  initializeCanonical();
   writeFileSync(join(sandbox, "docs/guide.md"), "# Guide\n\nTokens come from packages/auth/src/token.ts.\n");
   addDocument("doc-guide", { path: "docs/guide.md", watches: ["packages/auth/src"] });
   const base = commitAll("add guide");
@@ -188,16 +199,21 @@ test("a missing or unreachable verification commit asks for a full review", () =
   assert.match(packet.reason, /No verification commit is recorded/);
 });
 
-test("without Git every packet is a full review", () => {
-  ok("init", "--root", sandbox);
-  writeFileSync(join(sandbox, "docs/guide.md"), "# Guide\n");
-  addDocument("doc-guide", { path: "docs/guide.md", watches: ["packages/auth/src"] });
-  ok("map", "update", "--root", sandbox);
-  append("packages/auth/src/token.ts", "\n// rotated\n");
-  const [packet] = reviewJson("doc-guide").documents;
-  assert.equal(packet.base.commit, null);
-  assert.equal(packet.mode, "full");
-  assert.match(packet.reason, /No verification commit is recorded/);
+test("document review refuses when a legacy repository has no Git metadata", () => {
+  git("init", "--quiet");
+  commitAll("fixture");
+  initializeCanonical();
+  rmSync(join(sandbox, ".git"), { recursive: true, force: true });
+  const review = run("docs", "review", "--root", sandbox);
+  assert.equal(review.status, 1);
+  assert.match(review.stderr, /requires a Git repository with an explicit canonical branch/);
+});
+
+test("init requires a Git commit before it can pin a branch", () => {
+  git("init", "--quiet");
+  const init = run("init", "--canonical-ref", "main", "--root", sandbox);
+  assert.equal(init.status, 1);
+  assert.match(init.stderr, /requires at least one Git commit/);
 });
 
 test("a declared suspect document is reviewed in full, and a historical one never", () => {
@@ -330,57 +346,123 @@ test("the reviewer agent and the review workflow ship with the skill", () => {
   assert.match(readFileSync(join(packageRoot, "skills/mauro/references/voyage.md"), "utf8"), /Run the document review/);
 });
 
-// A branch behind its upstream produces confident findings about code that has
-// already changed. The guard states the scale of the drift and refuses.
-function behindUpstream() {
+// A branch behind accepted history produces confident findings about code that
+// already changed. The guard uses canonical_ref, not the branch's upstream.
+function behindCanonical() {
   git("init", "--quiet");
   commitAll("fixture");
-  ok("init", "--root", sandbox);
-  commitAll("mauro state");
   git("branch", "base");
+  git("checkout", "--quiet", "base");
+  ok("init", "--canonical-ref", "base", "--root", sandbox);
+  commitAll("mauro state");
   git("checkout", "--quiet", "-b", "work");
-  git("branch", "--set-upstream-to=base", "work");
   git("checkout", "--quiet", "base");
   append("packages/auth/src/token.ts", "\n// upstream moved\n");
   commitAll("Rotate the token format");
   git("checkout", "--quiet", "work");
 }
 
-test("docs review refuses while the branch is behind its upstream", () => {
-  behindUpstream();
+test("docs review refuses while the branch is behind the canonical ref", () => {
+  behindCanonical();
   const refused = run("docs", "review", "--root", sandbox);
   assert.equal(refused.status, 1);
-  assert.match(refused.stderr, /1 commit behind base/);
+  assert.match(refused.stderr, /canonical branch base: 1 commit behind/);
   assert.match(refused.stderr, /--allow-behind/);
-  const allowed = run("docs", "review", "--allow-behind", "--root", sandbox);
+  const allowed = run("docs", "review", "--allow-behind", "--json", "--root", sandbox);
   assert.equal(allowed.status, 0, allowed.stderr);
+  assert.equal(JSON.parse(allowed.stdout).canonical.ref, "base");
 });
 
-test("run refuses to plan against a branch that is behind its upstream", () => {
-  behindUpstream();
+test("run refuses to plan against a branch that is behind the canonical ref", () => {
+  behindCanonical();
   const refused = run("run", "Update the guide", "--root", sandbox);
   assert.equal(refused.status, 1);
-  assert.match(refused.stderr, /1 commit behind base/);
+  assert.match(refused.stderr, /canonical branch base: 1 commit behind/);
   const allowed = run("run", "Update the guide", "--allow-behind", "--root", sandbox);
   assert.equal(allowed.status, 0, allowed.stderr);
 });
 
-test("a branch level with or ahead of its upstream is not refused", () => {
+test("a branch level with or ahead of canonical history is not refused", () => {
   git("init", "--quiet");
   commitAll("fixture");
-  ok("init", "--root", sandbox);
-  commitAll("mauro state");
   git("branch", "base");
+  git("checkout", "--quiet", "base");
+  ok("init", "--canonical-ref", "base", "--root", sandbox);
+  commitAll("mauro state");
   git("checkout", "--quiet", "-b", "work");
-  git("branch", "--set-upstream-to=base", "work");
   assert.equal(run("docs", "review", "--root", sandbox).status, 0);
   append("packages/auth/src/token.ts", "\n// ours\n");
   commitAll("Our own commit");
   assert.equal(run("docs", "review", "--root", sandbox).status, 0);
 });
 
-test("without an upstream nothing is refused", () => {
+test("legacy unpinned state is refused even with the checkout-drift override", () => {
   guidedRepository();
-  assert.equal(run("docs", "review", "--root", sandbox).status, 0);
-  assert.equal(run("run", "Update the guide", "--root", sandbox).status, 0);
+  configureCanonical(null);
+  for (const args of [
+    ["docs", "review", "--root", sandbox],
+    ["docs", "review", "--allow-behind", "--root", sandbox],
+    ["run", "Update the guide", "--allow-behind", "--root", sandbox]
+  ]) {
+    const refused = run(...args);
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /requires git\.canonical_ref/);
+  }
+});
+
+test("origin HEAD is offered as evidence but never selected implicitly", () => {
+  git("init", "--quiet");
+  commitAll("fixture");
+  const head = git("rev-parse", "HEAD");
+  git("update-ref", "refs/remotes/origin/trunk", head);
+  git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+  let init = run("init", "--root", sandbox);
+  assert.equal(init.status, 1);
+  assert.match(init.stderr, /Ask the user which branch represents accepted history/);
+  assert.match(init.stderr, /origin\/trunk/);
+  assert.doesNotMatch(init.stderr, /Available branches:[^\n]*origin\/HEAD/);
+  init = run("init", "--canonical-ref", "origin/HEAD", "--root", sandbox);
+  assert.equal(init.status, 1);
+  assert.match(init.stderr, /is symbolic/);
+  ok("init", "--canonical-ref", "origin/trunk", "--root", sandbox);
+  const status = JSON.parse(ok("status", "--json", "--root", sandbox).stdout).git;
+  assert.equal(status.ref, "origin/trunk");
+  assert.equal(status.source, "configured");
+  assert.equal(status.relationship, "current");
+  const doctor = JSON.parse(ok("doctor", "--json", "--root", sandbox).stdout).git;
+  assert.equal(doctor.canonical_commit, head);
+});
+
+test("a missing configured canonical ref and detached HEAD are refused", () => {
+  git("init", "--quiet");
+  commitAll("fixture");
+  initializeCanonical();
+  configureCanonical("origin/trunk");
+  let refused = run("docs", "review", "--root", sandbox);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /canonical branch origin\/trunk is not available locally/);
+
+  configureCanonical("HEAD~0");
+  // The policy rejects revision expressions: canonical_ref must be a ref name.
+  refused = run("status", "--root", sandbox);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /safe Git ref name/);
+
+  configureCanonical("base");
+  git("branch", "base");
+  git("checkout", "--quiet", "--detach", "HEAD");
+  refused = run("docs", "review", "--root", sandbox);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /HEAD is detached/);
+  assert.equal(run("docs", "review", "--allow-behind", "--root", sandbox).status, 0);
+});
+
+test("docs confirm applies the same canonical guard", () => {
+  behindCanonical();
+  const evidence = chronicle("canonical-review.md");
+  const refused = run("docs", "confirm", "doc-charter", "--evidence", evidence, "--root", sandbox);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /canonical branch base: 1 commit behind/);
+  const allowed = run("docs", "confirm", "doc-charter", "--evidence", evidence, "--allow-behind", "--root", sandbox);
+  assert.equal(allowed.status, 0, allowed.stderr);
 });

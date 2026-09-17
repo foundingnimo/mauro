@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "mode": "advise",
+  "git": {
+    "canonical_ref": null
+  },
   "scan": {
     "packages": {
       "include": {
@@ -39,12 +42,8 @@
     "generated": {
       "mode": "exclude",
       "patterns": [
-        "vendor/**",
-        "**/vendor/**",
         "dist/**",
         "**/dist/**",
-        "build/**",
-        "**/build/**",
         "coverage/**",
         "**/coverage/**",
         ".next/**",

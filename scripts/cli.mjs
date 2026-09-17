@@ -9,14 +9,16 @@ import { impact, knowledge, matchingNavigators, where, who, why } from "./lib/qu
 import { renderPrContext } from "./lib/render.mjs";
 import { nextSteps, renderNext } from "./lib/next.mjs";
 import { confirmDocument, renderReview, reviewPackets } from "./lib/review.mjs";
-import { assertBranchCurrent } from "./lib/freshness.mjs";
-import { initialize, isInitialized, loadState, pluginRootFrom, updateMap } from "./lib/state.mjs";
+import { assertCanonicalCurrent } from "./lib/freshness.mjs";
+import { initialize, isInitialized, loadState, pluginRootFrom, reconcile, repositoryMigrationStatus, updateMap } from "./lib/state.mjs";
 import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
 import { describeTool, listTools, runTool } from "./lib/toolbox.mjs";
 import { dismissToolGap, exportToolGap, listToolGaps, recordToolGap, resolveToolGap, showToolGap } from "./lib/tool-gaps.mjs";
 import { clearStaleProjectLock, projectLockStatus } from "./lib/lock.mjs";
 import { abandonVoyage, activateVoyage, createVoyage, finishVoyage, getVoyage, listVoyages, resumeVoyage, summarizeVoyages } from "./lib/voyages.mjs";
+import { buildBrief, renderBrief } from "./lib/brief.mjs";
+import { adapterStatus } from "./lib/adapters.mjs";
 
 function option(args, name) {
   const index = args.indexOf(name);
@@ -68,9 +70,9 @@ function format(value, indent = "") {
 }
 
 function printCheck(report, json) {
-  if (json) return output({ ok: report.ok, current: report.current, errors: report.errors, warnings: report.warnings, findings: report.findings }, true);
+  if (json) return output({ ok: report.ok, current: report.current, publication: report.publication, errors: report.errors, warnings: report.warnings, findings: report.findings }, true);
   const result = report.ok ? (report.current ? "PASS" : "REVIEW") : "FAIL";
-  output(`Bearing check: ${result}\nErrors: ${report.errors}\nWarnings: ${report.warnings}${report.information ? `\nInformation: ${report.information}` : ""}`);
+  output(`Map publication: ${report.publication.state}\nBearing check: ${result}\nErrors: ${report.errors}\nWarnings: ${report.warnings}${report.information ? `\nInformation: ${report.information}` : ""}`);
   for (const item of report.findings) {
     output(`${item.level.toUpperCase()} ${item.code}: ${item.message}${item.path ? ` [${item.path}]` : ""}`);
   }
@@ -101,7 +103,7 @@ function charterCommand(root, action, args, json) {
     return output("The Charter still holds the template prompts. Use `mauro charter create` to draft it from the Map and the repository guides.");
   }
   const hint = charter.state === "partial" ? ` Sections still holding template prompts: ${charter.template_sections.join(", ")}.` : "";
-  output(`Charter ${action || "create"} needs a Claude proposal. Show the draft and diff. Apply it only after user approval.${hint}`);
+  output(`Charter ${action || "create"} needs a coding-agent proposal. Show the draft and diff. Apply it only after user approval.${hint}`);
 }
 
 function mapCommand(root, action, args, json) {
@@ -114,7 +116,7 @@ function mapCommand(root, action, args, json) {
   }
   if (action === "update") {
     const result = updateMap(root);
-    return output({ outcome: "Map updated", files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, capabilities: result.map.capabilities.length, note: "Mauro preserved semantic capability decisions. A Map synthesizer must review new or removed units and flagged perimeter regions. Restart other open Claude Code sessions to load changed Navigator definitions." }, json);
+    return output({ outcome: "Map updated", files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, capabilities: result.map.capabilities.length, note: "Mauro preserved semantic capability decisions. A Map synthesizer must review new or removed units and flagged perimeter regions. Restart agent sessions that cache repository skills or agents." }, json);
   }
   if (action === "verify") {
     const report = checkRepository(root);
@@ -127,14 +129,18 @@ function mapCommand(root, action, args, json) {
 
 function docsCommand(root, action, args, json) {
   if (action === "review") {
-    assertBranchCurrent(root, { action: "review", allowBehind: Boolean(option(args, "--allow-behind")) });
+    const allowBehind = option(args, "--allow-behind");
+    if (allowBehind !== null && allowBehind !== true) throw new Error("--allow-behind does not take a value.");
+    assertCanonicalCurrent(root, { config: loadState(root).config, action: "document review", allowBehind: Boolean(allowBehind) });
     const result = reviewPackets(root, { id: args.join(" ").trim() || null });
     return output(json ? result : renderReview(result), json);
   }
   if (action === "confirm") {
+    const allowBehind = option(args, "--allow-behind");
+    if (allowBehind !== null && allowBehind !== true) throw new Error("--allow-behind does not take a value.");
     const evidence = option(args, "--evidence");
     const id = requireValue(args, "A document id");
-    return output(confirmDocument(root, id, evidence === true ? null : evidence), json);
+    return output(confirmDocument(root, id, evidence === true ? null : evidence, { allowBehind: Boolean(allowBehind) }), json);
   }
   const report = checkRepository(root);
   if (action === "check") {
@@ -164,7 +170,7 @@ function navigatorCommand(root, action, args, json) {
     const name = args.join(" ").trim() || "all";
     if (name !== "all" && !state.manifest.navigators[name]) throw new Error(`Unknown Navigator: ${name}`);
     const result = updateMap(root);
-    return output({ outcome: "Navigator views regenerated", requested: name, generated: Object.keys(result.manifest.navigators).length, note: "Mauro preserved semantic capability decisions. Restart other open Claude Code sessions to load the regenerated Navigator definitions." }, json);
+    return output({ outcome: "Navigator views regenerated", requested: name, generated: Object.keys(result.manifest.navigators).length, note: "Mauro preserved semantic capability decisions. Restart agent sessions that cache repository skills or agents." }, json);
   }
   output(`Navigator ${action} needs semantic review. Use the Map as evidence and regenerate only the affected view.`);
 }
@@ -260,7 +266,7 @@ function prCommand(root, action, args) {
   if (action === "reviewers") return output([...new Set(navigators)].sort());
   const block = renderPrContext({ base, head: gitHead(root), paths, navigators, status: report.current ? "current" : "needs attention" });
   output(block);
-  if (action === "update") output("The local tool does not write to the pull request. Claude must show the final block and use an authorized GitHub operation.");
+  if (action === "update") output("The local tool does not write to the pull request. The host agent must show the final block and use an authorized GitHub operation.");
   if (action === "check" && !report.ok) process.exitCode = 1;
 }
 
@@ -277,16 +283,20 @@ function doctor(root, pluginRoot, json, args = []) {
   if (clearLock !== null && clearLock !== true) throw new Error("--clear-stale-lock does not take a value.");
   rejectArguments(args, "mauro doctor [--clear-stale-lock]");
   const lockCleanup = clearLock ? clearStaleProjectLock(root) : null;
-  const files = [".claude-plugin/plugin.json", "skills/mauro/SKILL.md", "hooks/hooks.json", "bin/mauro", "scripts/lib/toolbox.mjs", "scripts/lib/tool-gaps.mjs", "scripts/lib/lock.mjs", "scripts/lib/voyages.mjs", "schemas/voyage.schema.json"];
+  const files = [".claude-plugin/plugin.json", "skills/mauro/SKILL.md", "skills/mauro/agents/openai.yaml", "skills/mauro-context/SKILL.md", "hooks/hooks.json", "bin/mauro", "scripts/lib/toolbox.mjs", "scripts/lib/tool-gaps.mjs", "scripts/lib/lock.mjs", "scripts/lib/voyages.mjs", "schemas/voyage.schema.json"];
   const installation = files.map((path) => ({ path, present: exists(resolve(pluginRoot, path)) }));
-  const result = { version: MAURO_VERSION, install: installStamp(pluginRoot), tool: installation, project_initialized: isInitialized(root), lock_cleanup: lockCleanup, project_lock: projectLockStatus(root) };
+  const install = installStamp(pluginRoot);
+  const adapters = adapterStatus(pluginRoot, install);
+  const result = { version: MAURO_VERSION, install, tool: installation, adapters, project_initialized: isInitialized(root), migration: repositoryMigrationStatus(root), lock_cleanup: lockCleanup, project_lock: projectLockStatus(root) };
   if (result.project_initialized) {
     const summary = statusSummary(root);
     result.charter = summary.charter;
     result.bearing = summary.bearing;
+    result.publication = summary.publication;
+    result.git = summary.git;
   }
   output(result, json);
-  if (installation.some((item) => !item.present)) process.exitCode = 1;
+  if (installation.some((item) => !item.present) || !adapters.healthy) process.exitCode = 1;
 }
 
 function requireVoyageId(args, usage) {
@@ -304,18 +314,24 @@ function runCommand(root, action, args, json) {
   if (action === "activate") {
     const id = requireVoyageId(args, "mauro run activate <voyage-id> [--path <path>]...");
     const paths = repeatedOption(args, "--path");
-    rejectArguments(args, "mauro run activate <voyage-id> [--path <path>]...");
-    return output({ outcome: "Voyage activated", voyage: activateVoyage(root, id, paths), note: "The approved path lease is active. Finish or abandon the Voyage to release it." }, json);
+    const allowBehind = option(args, "--allow-behind");
+    if (allowBehind !== null && allowBehind !== true) throw new Error("--allow-behind does not take a value.");
+    rejectArguments(args, "mauro run activate <voyage-id> [--path <path>]... [--allow-behind]");
+    return output({ outcome: "Voyage activated", voyage: activateVoyage(root, id, paths, { allowBehind: Boolean(allowBehind) }), note: "The approved path lease is active. Finish or abandon the Voyage to release it." }, json);
   }
   if (action === "resume") {
     const id = requireVoyageId(args, "mauro run resume <voyage-id>");
-    rejectArguments(args, "mauro run resume <voyage-id>");
-    return output({ outcome: "Voyage resumed", voyage: resumeVoyage(root, id) }, json);
+    const allowBehind = option(args, "--allow-behind");
+    if (allowBehind !== null && allowBehind !== true) throw new Error("--allow-behind does not take a value.");
+    rejectArguments(args, "mauro run resume <voyage-id> [--allow-behind]");
+    return output({ outcome: "Voyage resumed", voyage: resumeVoyage(root, id, { allowBehind: Boolean(allowBehind) }) }, json);
   }
   if (action === "finish") {
     const id = requireVoyageId(args, "mauro run finish <voyage-id>");
-    rejectArguments(args, "mauro run finish <voyage-id>");
-    return output({ outcome: "Voyage completed and path lease released", voyage: finishVoyage(root, id) }, json);
+    const allowBehind = option(args, "--allow-behind");
+    if (allowBehind !== null && allowBehind !== true) throw new Error("--allow-behind does not take a value.");
+    rejectArguments(args, "mauro run finish <voyage-id> [--allow-behind]");
+    return output({ outcome: "Voyage completed and path lease released", voyage: finishVoyage(root, id, { allowBehind: Boolean(allowBehind) }) }, json);
   }
   if (action === "abandon") {
     const id = requireVoyageId(args, "mauro run abandon <voyage-id> --reason <reason>");
@@ -327,7 +343,6 @@ function runCommand(root, action, args, json) {
   const allowBehind = option(args, "--allow-behind");
   if (allowBehind !== null && allowBehind !== true) throw new Error("--allow-behind does not take a value.");
   const objective = [action, ...args].join(" ").trim();
-  assertBranchCurrent(root, { action: "plan", allowBehind: Boolean(allowBehind) });
   const voyage = createVoyage(root, objective, { allowBehind: Boolean(allowBehind) });
   const report = checkRepository(root);
   return output({
@@ -375,19 +390,36 @@ export async function runCli(argv = process.argv.slice(2)) {
   if (command === "doctor") return doctor(root, pluginRoot, json, args);
   if (command === "tool") return toolCommand(root, args.shift(), args, json);
   if (command === "init") {
-    const result = initialize(root, pluginRoot);
-    return output({ outcome: "Expedition scaffold created", root, files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, capabilities: result.map.capabilities.length, next: [
+    const canonicalRef = option(args, "--canonical-ref");
+    if (canonicalRef === true) throw new Error("--canonical-ref requires a branch name.");
+    rejectArguments(args, "mauro init --canonical-ref <branch>");
+    const result = initialize(root, pluginRoot, { canonicalRef });
+    const instructionWarnings = result.map.instruction_file_warnings || [];
+    const next = [
       "Review flagged perimeter regions.",
       "Run the Mauro mapper agents and approve the Map at the Map gate.",
       "Run `mauro charter create`. The Charter holds the template prompts until then.",
       "Run `mauro check`.",
-      "Restart other open Claude Code sessions to load the generated project Navigators."
-    ] }, json);
+      "Restart agent sessions that cache repository skills or agents."
+    ];
+    if (instructionWarnings.length) next.unshift("Review oversized agent instruction files before relying on complete host context.");
+    return output({ outcome: "Expedition scaffold created", root, canonical: result.canonical, files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, instruction_file_warnings: instructionWarnings, capabilities: result.map.capabilities.length, next }, json);
   }
   if (!isInitialized(root)) throw new Error("Mauro is not initialized. Run `mauro init`.");
 
   const action = args.shift();
   if (command === "status") return output(statusSummary(root), json);
+  if (command === "brief") {
+    const brief = buildBrief(root, requireValue([action, ...args].filter(Boolean), "An objective"));
+    return output(json ? brief : renderBrief(brief), json);
+  }
+  if (command === "reconcile") {
+    const reconcileArgs = [action, ...args].filter(Boolean);
+    const force = option(reconcileArgs, "--force");
+    if (force !== null && force !== true) throw new Error("--force does not take a value.");
+    rejectArguments(reconcileArgs, "mauro reconcile [--force]");
+    return output(reconcile(root, { force: Boolean(force) }), json);
+  }
   if (command === "check") {
     const report = checkRepository(root);
     printCheck(report, json);
@@ -409,7 +441,7 @@ export async function runCli(argv = process.argv.slice(2)) {
   if (command === "knowledge") {
     const result = knowledge(root, action || "list", args.join(" "));
     output(result, json);
-    if (["propose", "verify", "update", "retire"].includes(action)) output("This operation needs a Claude proposal and context verification. The deterministic tool made no change.");
+    if (["propose", "verify", "update", "retire"].includes(action)) output("This operation needs a coding-agent proposal and context verification. The deterministic tool made no change.");
     return;
   }
   if (command === "pr") return prCommand(root, action || "preview", args);

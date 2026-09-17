@@ -12,38 +12,14 @@ Status values:
 
 ## Now
 
-### Multi-session ownership and locking
+### Consistent multi-session reads
 
-Goal: Let several Claude Code sessions use one repository without losing Mauro
+Goal: Let several coding-agent sessions use one repository without losing Mauro
 state or performing overlapping work by accident.
 
-- [x] Use one atomic local write lock for Mauro state mutations in a working
-  tree.
-- [x] Cover initialization, Map regeneration, document confirmation, Tool Gap
-  mutation, and changed-path queue mutation.
-- [x] Record the process, host, operation, and acquisition time in the transient
-  lock so `mauro doctor` can explain contention.
-- [x] Add a safe command to clear a lock after Mauro proves that its local owner
-  process is gone.
-- [x] Give each `/mauro run` a durable Voyage ID and an explicit path scope.
-- [x] Add path-scoped Voyage leases and refuse two active Voyages that overlap.
 - [ ] Permit concurrent readers while keeping multi-file state reads consistent.
 - [ ] Detect a changed Git baseline before a Voyage writes curated context.
 - [ ] Define behavior for separate local users, Git worktrees, and remote hosts.
-
-### Compact ticket briefing
-
-Goal: Give an implementation session all relevant context without making it run
-a new repository survey.
-
-- [ ] Add `/mauro brief "<ticket>"`.
-- [ ] Return responsible and reviewing Navigators, likely paths, active
-  knowledge, Charter constraints, dependencies, suspect documents, and exact
-  verification.
-- [ ] Provide concise text and stable JSON output.
-- [ ] Keep Jira or another ticket provider outside the deterministic core.
-
-## Next
 
 ### Navigator coverage checks
 
@@ -51,6 +27,14 @@ a new repository survey.
 - [ ] Find excessive or contradictory Navigator overlap.
 - [ ] Flag broad descriptions, weak evidence, and unapproved boundaries.
 - [ ] Surface these findings through `mauro check` and `mauro next`.
+
+## Next
+
+### Additional lifecycle adapters
+
+- [ ] Add native lifecycle adapters for hosts that expose safe hook APIs.
+- [ ] Keep task-boundary reconciliation as the portable fallback.
+- [ ] Verify adapter behavior without changing canonical repository state.
 
 ### Learn from completed Voyages
 
@@ -88,7 +72,22 @@ a new repository survey.
   detection, false positives, and context size.
 - [ ] Turn each confirmed failure into a regression fixture.
 
+### Expedition Tool Gap provenance
+
+- [ ] Let an Expedition stage structured Tool Gap observations before a Voyage
+  exists.
+- [ ] Use the approved Expedition Chronicle as provenance.
+- [ ] Preserve the existing cross-Voyage promotion threshold; one Expedition
+  must not promote its own reported gaps.
+
 ## Later
+
+### Background service evaluation
+
+- [ ] Evaluate a long-running watcher after task-boundary reconciliation has
+  production evidence; it must not rescan continuously or race other writers.
+- [ ] Add an MCP adapter only when it offers capability beyond the shared skill
+  and CLI, and test it against the supported protocol versions.
 
 ### Map quality metrics
 
@@ -109,3 +108,44 @@ a new repository survey.
 - [ ] Add responsible Navigators, Charter constraints, document state, and
   observed verification to the bounded pull-request block.
 - [ ] Keep every external pull-request write behind explicit authorization.
+
+## Completed
+
+### Ambient and provider-neutral operation
+
+- [x] Split automatic `mauro-context` behavior from explicit `mauro`
+  administration.
+- [x] Initialize, reconcile, and brief through the ambient skill at task
+  boundaries.
+- [x] Keep Claude Code hooks, path rules, and specialist project agents.
+- [x] Publish shared skills and repository Navigators for Codex, Grok, and
+  compatible hosts.
+- [x] Move standalone runtime files to `~/.mauro`, add host profiles, and
+  migrate the legacy Claude runtime.
+- [x] Add adapter and repository-migration health to `mauro doctor`.
+
+### Multi-session ownership foundation
+
+- [x] Serialize complete state mutations with an owner-labelled local lock.
+- [x] Cover initialization, Map regeneration, document confirmation, Tool Gap
+  changes, and changed-path queue changes.
+- [x] Add safe stale-lock recovery.
+- [x] Give Voyages durable IDs, lifecycle records, path leases, and overlap
+  refusal.
+- [x] Ask for and pin one exact canonical Git branch during init, report its
+  status, and guard document trust and Voyage lifecycle changes.
+
+### Compact ticket briefing
+
+- [x] Add `/mauro brief "<ticket>"` with responsible and reviewing Navigators,
+  likely paths, active knowledge, Charter constraints, dependencies, suspect
+  documents, and exact verification.
+- [x] Provide concise text and stable JSON output.
+- [x] Keep ticket-provider integration outside the deterministic core.
+
+### First-run safeguards
+
+- [x] Scan ambiguous `vendor/` and `build/` directories by default.
+- [x] Warn before semantic surveys when an agent instruction file exceeds the
+  conservative host-context threshold.
+- [x] Report Map publication independently from Bearing health.

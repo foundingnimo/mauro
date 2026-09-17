@@ -23,7 +23,9 @@
       "required": ["commit", "dirty"],
       "properties": {
         "commit": { "type": ["string", "null"], "pattern": "^[a-f0-9]{7,40}$" },
-        "dirty": { "type": "boolean" }
+        "dirty": { "type": "boolean" },
+        "canonical_ref": { "type": ["string", "null"], "minLength": 1 },
+        "canonical_commit": { "type": ["string", "null"], "pattern": "^[a-f0-9]{7,40}$" }
       }
     },
     "allow_behind": { "type": "boolean" },

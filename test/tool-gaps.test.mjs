@@ -21,6 +21,12 @@ function ok(...args) {
   return result;
 }
 
+function git(...args) {
+  const result = spawnSync("git", ["-c", "user.email=mauro@test.local", "-c", "user.name=Mauro Test", "-c", "commit.gpgsign=false", ...args], { cwd: sandbox, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
 function readLog() {
   return JSON.parse(readFileSync(join(sandbox, ".mauro/tool-gaps.json"), "utf8"));
 }
@@ -54,7 +60,11 @@ function record(voyage, reporter, checked = "dependency-graph", overrides = {}) 
 beforeEach(() => {
   sandbox = mkdtempSync(join(tmpdir(), "mauro-tool-gaps-"));
   cpSync(fixture, sandbox, { recursive: true });
-  ok("init", "--root", sandbox);
+  git("init", "--quiet");
+  git("add", "-A");
+  git("commit", "--quiet", "-m", "fixture");
+  git("branch", "canonical");
+  ok("init", "--canonical-ref", "canonical", "--root", sandbox);
 });
 
 afterEach(() => {

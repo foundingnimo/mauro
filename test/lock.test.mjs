@@ -13,6 +13,20 @@ const fixture = join(packageRoot, "test/fixtures/monorepo");
 const bin = join(packageRoot, "bin/mauro");
 let sandbox;
 
+function git(...args) {
+  const result = spawnSync("git", ["-c", "user.email=mauro@test.local", "-c", "user.name=Mauro Test", "-c", "commit.gpgsign=false", ...args], { cwd: sandbox, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+function initializeRepository() {
+  git("init", "--quiet");
+  git("add", "-A");
+  git("commit", "--quiet", "-m", "fixture");
+  git("branch", "canonical");
+  return initialize(sandbox, packageRoot, { canonicalRef: "canonical" });
+}
+
 beforeEach(() => {
   sandbox = mkdtempSync(join(tmpdir(), "mauro-lock-"));
   cpSync(fixture, sandbox, { recursive: true });
@@ -96,7 +110,7 @@ test("a dead local owner is reported as stale and is not removed automatically",
 });
 
 test("state mutators hold the lock across the complete Map update", () => {
-  initialize(sandbox, packageRoot);
+  initializeRepository();
   const before = readFileSync(join(sandbox, ".mauro/map.json"), "utf8");
   withProjectLock(sandbox, "other writer", () => {
     assert.throws(() => updateMap(sandbox), /Nested state mutation is not allowed/);
@@ -124,7 +138,7 @@ function changedHook(path) {
 }
 
 test("concurrent hooks do not lose changed paths", async () => {
-  initialize(sandbox, packageRoot);
+  initializeRepository();
   const paths = Array.from({ length: 20 }, (_, index) => `apps/web/src/concurrent-${index}.ts`);
   await Promise.all(paths.map(changedHook));
   const queue = JSON.parse(readFileSync(join(sandbox, ".mauro/changed-paths.json"), "utf8"));

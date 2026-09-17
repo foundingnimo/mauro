@@ -3,6 +3,20 @@
 Read `.mauro/config.json` before an Expedition, Map update, or semantic survey.
 Stop when the deterministic tool reports invalid configuration.
 
+## Canonical Git ref
+
+`git.canonical_ref` identifies accepted repository history. It must name one
+exact local or remote-tracking branch, for example `origin/main`. During init,
+list the available branches and ask the user which one is canonical. Do not
+infer the answer from the current branch, `origin/HEAD`, `main`, or `master`.
+`null`, a tag, a missing branch, and a symbolic alias are not configured.
+
+Mauro does not fetch or modify Git state. Treat its result as a comparison with
+local Git knowledge. An unpinned, missing, non-branch, or symbolic ref blocks
+trusted-state work and cannot be overridden. A behind, diverged, or detached
+checkout can continue with `--allow-behind` only after a person or supervising
+agent accepts the risk and records the override in the Chronicle.
+
 ## Package scope
 
 Package selectors contain `names` and repository-relative `paths`. Exclude
@@ -46,6 +60,11 @@ Tests, fixtures, and generated files have one of these modes:
 
 An evidence file cannot define a capability. It cannot create a duplication or
 Refit finding. A package override takes precedence over the global role mode.
+
+Do not classify `vendor/` or `build/` as generated from the directory name
+alone. Mauro scans those names by default because they can hold product code,
+documentation, or hand-written tools. A repository can add an exact generated
+pattern after evidence confirms that the matching content is generated.
 
 Document, path, and language filters apply after role selection. Structural
 manifests remain available through a language filter. Do not read an oversize

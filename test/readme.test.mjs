@@ -30,19 +30,33 @@ test("README lists every public command and frequent alias", () => {
 test("README overview includes durable coordination state", () => {
   const overview = section("# Mauro", "## Quickstart");
   assert.doesNotMatch(overview, /Mauro has four durable outputs/);
-  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal"]) {
+  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal", "Map-publication", "oversized agent instruction files"]) {
     assert.ok(overview.includes(text), `README overview is missing: ${text}`);
   }
 });
 
 test("README keeps the autonomous Quickstart and shared Navigator contract", () => {
   const quickstart = section("## Quickstart", "## Install");
-  for (const command of ["/mauro init", "/mauro next", "/mauro run", "/mauro run activate", "/mauro run finish", "/mauro check", "/mauro help"]) {
+  for (const command of ["/mauro init", "/mauro next", "/mauro brief", "/mauro run", "/mauro run activate", "/mauro run finish", "/mauro reconcile", "/mauro check", "/mauro help"]) {
     assert.ok(quickstart.includes(command), `Quickstart is missing ${command}`);
   }
+  for (const text of ["asks which exact branch", "--canonical-ref <selected-branch>", "It does not infer the answer", "oversized `AGENTS.md` and `CLAUDE.md`"]) {
+    assert.ok(quickstart.includes(text), `Quickstart is missing canonical-branch guidance: ${text}`);
+  }
 
-  const sharing = section("## Use Navigators from other Claude sessions", "## Configure an Expedition");
-  for (const text of [".claude/agents/", ".claude/rules/mauro/", ".mauro/voyages/", "docs/mauro/", "/agents", "/mauro who <path>", "/mauro impact", "read-only", "Restart a session", "mauro run status"]) {
+  const sharing = section("## Use Navigators from any agent session", "## Configure an Expedition");
+  for (const text of [".agents/skills/", ".claude/agents/", ".claude/rules/mauro/", ".mauro/voyages/", "docs/mauro/", "/agents", "/mauro who <path>", "/mauro impact", "read-only", "Restart a", "mauro run status"]) {
     assert.ok(sharing.includes(text), `Navigator sharing guidance is missing: ${text}`);
+  }
+});
+
+test("README presents Mauro as ambient and multi-agent", () => {
+  const overview = section("# Mauro", "## Status");
+  for (const text of ["ambient repository-context sidecar", "Claude Code", "Codex", "Grok", "SKILL.md"]) {
+    assert.ok(overview.includes(text), `README overview is missing: ${text}`);
+  }
+  const install = section("## Install", "## Main commands");
+  for (const text of ["~/.mauro", "~/.agents/skills/mauro-context", "mauro-context", "--host all", "### Agent compatibility", "| Codex |", "| Grok |", "richest adapter"]) {
+    assert.ok(readme.includes(text), `README compatibility guidance is missing: ${text}`);
   }
 });

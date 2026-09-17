@@ -3,7 +3,7 @@
   "name": "foundingnimo",
   "displayName": "Mauro",
   "version": "0.1.3",
-  "description": "Maps repositories, creates specialist Navigators, and preserves verified code rationale between Claude Code sessions.",
+  "description": "Claude Code adapter for Mauro's ambient repository maps, specialist Navigators, and verified rationale.",
   "author": {
     "name": "foundingnimo"
   },
@@ -12,6 +12,8 @@
   "license": "MIT",
   "keywords": [
     "claude-code",
+    "codex",
+    "grok",
     "repository-map",
     "agent-memory",
     "architecture",

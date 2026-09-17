@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_GENERATED_PATTERNS } from "./lib/constants.mjs";
 import { validateConfig } from "./lib/policy.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,12 +26,16 @@ const required = [
   ".npmignore",
   ".claude-plugin/plugin.json",
   "skills/mauro/SKILL.md",
+  "skills/mauro/agents/openai.yaml",
+  "skills/mauro-context/SKILL.md",
   "hooks/hooks.json",
   "bin/mauro",
   "scripts/lib/toolbox.mjs",
   "scripts/lib/tool-gaps.mjs",
   "scripts/lib/lock.mjs",
   "scripts/lib/voyages.mjs",
+  "scripts/lib/brief.mjs",
+  "scripts/lib/adapters.mjs",
   "scripts/install-standalone-hooks.mjs",
   "schemas/map.schema.json",
   "schemas/manifest.schema.json",
@@ -64,6 +69,11 @@ const defaultConfig = readJson("templates/config.json");
 if (defaultConfig) {
   try {
     validateConfig(defaultConfig);
+    for (const ambiguous of ["vendor/**", "**/vendor/**", "build/**", "**/build/**"]) {
+      if (defaultConfig.scan.generated.patterns.includes(ambiguous) || DEFAULT_GENERATED_PATTERNS.includes(ambiguous)) {
+        fail(`ambiguous generated pattern ${ambiguous} must be repository-specific.`);
+      }
+    }
   } catch (error) {
     fail(`templates/config.json: ${error.message}`);
   }
@@ -73,16 +83,31 @@ if (!defaultToolGaps || defaultToolGaps.schema_version !== 1 || defaultToolGaps.
   fail("templates/tool-gaps.json: invalid default Tool Gap Log.");
 }
 
-const skillPath = join(root, "skills/mauro/SKILL.md");
-if (existsSync(skillPath)) {
+function validateSkill(directory, { explicit }) {
+  const skillPath = join(root, "skills", directory, "SKILL.md");
+  if (!existsSync(skillPath)) return;
   const skill = readFileSync(skillPath, "utf8");
-  if (!skill.startsWith("---\n")) fail("SKILL.md: YAML frontmatter is missing.");
-  if (!/\nname: mauro\n/.test(skill)) fail("SKILL.md: skill name is wrong.");
-  if (!/\ndescription: .+/.test(skill)) fail("SKILL.md: description is missing.");
-  if (skill.split("\n").length > 100) fail("SKILL.md: keep the main skill under 100 lines.");
-  for (const match of skill.matchAll(/\]\((references\/[^)]+)\)/g)) {
-    if (!existsSync(join(dirname(skillPath), match[1]))) fail(`SKILL.md: broken reference ${match[1]}.`);
+  const label = `skills/${directory}/SKILL.md`;
+  if (!skill.startsWith("---\n")) fail(`${label}: YAML frontmatter is missing.`);
+  if (!new RegExp(`\\nname: ${directory}\\n`).test(skill)) fail(`${label}: skill name must match its directory.`);
+  if (!/\ndescription: .+/.test(skill)) fail(`${label}: description is missing.`);
+  const invocationDisabled = /\ndisable-model-invocation:\s*true\s*$/m.test(skill);
+  if (explicit && !invocationDisabled) fail(`${label}: explicit administration must disable model invocation.`);
+  if (!explicit && invocationDisabled) fail(`${label}: ambient invocation must stay enabled.`);
+  if (skill.split("\n").length > 100) fail(`${label}: keep the main skill under 100 lines.`);
+  for (const match of skill.matchAll(/\]\(([^)#]+)(?:#[^)]+)?\)/g)) {
+    const target = resolve(dirname(skillPath), match[1]);
+    if (!existsSync(target)) fail(`${label}: broken reference ${match[1]}.`);
   }
+}
+validateSkill("mauro", { explicit: true });
+validateSkill("mauro-context", { explicit: false });
+
+const openAiMetadata = join(root, "skills/mauro/agents/openai.yaml");
+if (existsSync(openAiMetadata)) {
+  const metadata = readFileSync(openAiMetadata, "utf8");
+  if (!/allow_implicit_invocation:\s*false/.test(metadata)) fail("skills/mauro/agents/openai.yaml: explicit skill must reject implicit invocation.");
+  if (!/default_prompt:\s*["'].*\$mauro/.test(metadata)) fail("skills/mauro/agents/openai.yaml: default prompt must name $mauro.");
 }
 
 const agentsDir = join(root, "agents");

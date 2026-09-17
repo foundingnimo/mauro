@@ -3,8 +3,13 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFil
 import { join, resolve } from "node:path";
 
 const claudeDirectory = process.argv[2] ? resolve(process.argv[2]) : null;
+const runtimeDirectory = process.argv[3] ? resolve(process.argv[3]) : null;
 if (!claudeDirectory) {
   process.stderr.write("A Claude configuration directory is required.\n");
+  process.exit(1);
+}
+if (!runtimeDirectory) {
+  process.stderr.write("A Mauro runtime directory is required.\n");
   process.exit(1);
 }
 
@@ -24,7 +29,7 @@ if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
   process.exit(1);
 }
 
-const executable = join(claudeDirectory, "mauro", "bin", "mauro");
+const executable = join(runtimeDirectory, "bin", "mauro");
 const quotedExecutable = executable.replace(/\\/g, "/").replace(/"/g, "\\\"");
 const commands = {
   SessionStart: `node "${quotedExecutable}" hook session-start`,
@@ -32,9 +37,9 @@ const commands = {
   Stop: `node "${quotedExecutable}" hook stop`
 };
 const groups = {
-  SessionStart: { hooks: [{ type: "command", command: commands.SessionStart, timeout: 20 }] },
+  SessionStart: { hooks: [{ type: "command", command: commands.SessionStart, timeout: 120 }] },
   PostToolUse: { matcher: "Edit|Write|MultiEdit|NotebookEdit", hooks: [{ type: "command", command: commands.PostToolUse, timeout: 10 }] },
-  Stop: { hooks: [{ type: "command", command: commands.Stop, timeout: 20 }] }
+  Stop: { hooks: [{ type: "command", command: commands.Stop, timeout: 120 }] }
 };
 
 settings.hooks ||= {};
@@ -48,10 +53,23 @@ for (const [event, group] of Object.entries(groups)) {
     process.stderr.write(`Mauro did not change ${settingsPath}: hooks.${event} must be an array.\n`);
     process.exit(1);
   }
-  const duplicate = settings.hooks[event].some((candidate) =>
-    candidate?.hooks?.some((hook) => hook?.command === commands[event])
-  );
-  if (!duplicate) settings.hooks[event].push(group);
+  // Replace hooks from the former ~/.claude/mauro runtime as well as an older
+  // neutral runtime path. Preserve unrelated commands, including commands that
+  // happen to share the same hook group.
+  settings.hooks[event] = settings.hooks[event]
+    .map((candidate) => {
+      if (!Array.isArray(candidate?.hooks)) return candidate;
+      return {
+        ...candidate,
+        hooks: candidate.hooks.filter((hook) => {
+          const command = String(hook?.command || "").replace(/\\/g, "/");
+          const mauroLifecycleCommand = /\/bin\/mauro["']?\s+hook\s+(?:session-start|changed|stop)\b/.test(command);
+          return !mauroLifecycleCommand;
+        })
+      };
+    })
+    .filter((candidate) => !Array.isArray(candidate?.hooks) || candidate.hooks.length > 0);
+  settings.hooks[event].push(group);
 }
 
 if (existsSync(settingsPath)) {

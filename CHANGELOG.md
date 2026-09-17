@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Reframe Mauro as an ambient repository-context sidecar that coding agents
+  invoke during normal work instead of a command-first human workflow.
+- Add automatic repository behavior through `mauro-context` and document its
+  initialization, reconciliation, briefing, and approval boundaries.
+- Generate provider-neutral Navigator skills under `.agents/skills/` while
+  retaining Claude Code agents, path rules, and lifecycle hooks.
+- Install the ambient and explicit Mauro skills into Claude and shared agent
+  skill directories for Claude Code, Codex, Grok, and compatible hosts.
+- Add `mauro brief` for bounded task context and `mauro reconcile` for
+  content-signature-based Map refreshes.
+- Reconcile automatically at Claude session start and stop without repeatedly
+  rescanning the same dirty working tree.
+- Move standalone installations to the provider-neutral `~/.mauro` runtime,
+  add `claude`, `shared`, and `all` host profiles, and migrate the former
+  `~/.claude/mauro` runtime on update.
+- Add installation and adapter health details to `mauro doctor`.
+- Add manifest schema 2 and automatic reconciliation migrations for portable
+  Navigator views; refuse unknown future schemas.
+- Require init to ask for and pin one exact local or remote-tracking branch in
+  `git.canonical_ref`; reject implicit, symbolic, missing, and non-branch refs.
+- Show canonical branch, commit, and ahead/behind state in status and doctor.
+- Guard document review and confirmation and Voyage lifecycle changes against
+  missing, detached, behind, or diverged canonical history; preserve canonical
+  evidence in review packets and Voyage baselines.
+- Scan ambiguous `vendor/` and `build/` paths by default instead of treating
+  every directory with those names as generated output.
+- Warn during init and Bearing checks when `AGENTS.md` or `CLAUDE.md` exceeds
+  the conservative 150,000-byte host-context threshold.
+- Report Map publication separately from Bearing health, including the
+  `published_with_findings` state for an approved Map with unresolved findings.
+
 ## 0.1.3 (2026-09-16)
 
 - Add the prioritized product roadmap in `backlog.md`.

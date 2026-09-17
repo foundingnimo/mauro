@@ -1,7 +1,9 @@
 # Mauro commands
 
-Use `/mauro` after standalone installation. Use `/foundingnimo:mauro` when
-the repository is loaded as a Claude Code plugin.
+Mauro normally runs through an ambient agent skill. Use these commands for
+diagnostics, automation, or explicit control. Claude Code exposes `/mauro`
+after standalone installation and `/foundingnimo:mauro` when the repository is
+loaded as a plugin. Other hosts can call the `mauro` CLI.
 
 ## Frequent commands
 
@@ -25,13 +27,15 @@ commands.
 
 ## Infrequent commands
 
-`charter`, `doctor`, `init`, `navigator`, `refit`, `tool`, `who`, and `why`
-have no one-letter alias.
+`brief`, `charter`, `doctor`, `init`, `navigator`, `reconcile`, `refit`, `tool`,
+`who`, and `why` have no one-letter alias.
 
 ## Examples
 
 ```text
 /mauro init
+/mauro brief "change token rotation" --json
+/mauro reconcile --json
 /mauro c
 /mauro docs review
 /mauro m find authentication
@@ -62,17 +66,49 @@ shows the proposed diff before it changes a human-owned document. Pull-request
 updates, commits, pushes, deployments, and product-code moves require explicit
 authorization.
 
+## Ambient operations
+
+```text
+mauro reconcile [--force] [--json]
+mauro brief "<objective>" [--json]
+```
+
+`reconcile` compares queued changes and the current Git path-and-content
+signature with the previous reconciliation. It regenerates derived context
+only when evidence changed. `--force` performs the refresh even without a
+detected change. `brief` is read-only. It returns the likely paths,
+responsible and reviewing Navigators, Charter, applicable knowledge,
+dependencies, document state, active Voyage conflicts, and verification.
+Neither command edits product code or starts a Voyage.
+
 ## Voyages and concurrent sessions
 
 ```text
 /mauro run "<objective>"
 /mauro run status [V-0001]
-/mauro run activate V-0001 [--path <approved-path>]...
-/mauro run resume V-0001
-/mauro run finish V-0001
+/mauro run activate V-0001 [--path <approved-path>]... [--allow-behind]
+/mauro run resume V-0001 [--allow-behind]
+/mauro run finish V-0001 [--allow-behind]
 /mauro run abandon V-0001 --reason "<reason>"
 /mauro doctor --clear-stale-lock
 ```
+
+Before the first Expedition, `/mauro init` lists the available local and
+remote-tracking branches and asks the user which exact branch represents
+accepted history. The underlying command is:
+
+```text
+mauro init --canonical-ref <selected-branch>
+```
+
+Mauro does not infer this choice from the current branch, `origin/HEAD`,
+`main`, or `master`.
+
+The deterministic init result lists oversized `AGENTS.md` and `CLAUDE.md`
+files before mapper agents run. This warning does not block initialization.
+`status`, `check`, and `doctor` report Map publication separately from Bearing
+health. An approved Map with unresolved errors or warnings is
+`published_with_findings`; its Bearing can still be blocked.
 
 Starting a Voyage creates a durable `planning` record in `.mauro/voyages/`
 and returns its Chronicle plan path, predicted paths, and Navigators. It does
@@ -84,9 +120,20 @@ active Voyage. Planning Voyages may overlap.
 lease. Only `finish` and `abandon` close a lease. Closed records retain their
 paths as history. `abandon` always requires a reason.
 
+The repository stores the selected branch in `git.canonical_ref` in
+`.mauro/config.json`. `status` and `doctor` report the relationship. Document
+review and confirmation and Voyage planning, activation, resumption, and
+completion stop on an unpinned or invalid branch. That configuration failure
+cannot be overridden. `--allow-behind` can explicitly accept a detached,
+behind, or diverged checkout. Mauro never fetches or changes the checkout.
+
 `doctor --clear-stale-lock` removes a transient writer lock only when Mauro can
 prove that its recorded process is local and no longer exists. It refuses an
 active, remote, or unreadable lock.
+
+`doctor` also reports the runtime location, selected host profiles, both skill
+adapters, Claude-hook currency, and repository migration status. A missing
+adapter that the install stamp selected makes the command fail.
 
 ## Toolbox
 

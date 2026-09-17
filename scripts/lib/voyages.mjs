@@ -6,6 +6,7 @@ import { gitBaseline, gitHead } from "./git.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { impact } from "./query.mjs";
 import { loadState } from "./state.mjs";
+import { assertCanonicalCurrent } from "./freshness.mjs";
 
 const STATUSES = new Set(["planning", "active", "completed", "abandoned"]);
 const EVENTS = new Set(["created", "activated", "resumed", "completed", "abandoned"]);
@@ -45,9 +46,11 @@ export function validateVoyage(value) {
   if (!STATUSES.has(value.status)) fail("status is invalid.");
   timestamp(value.created_at, "created_at");
   timestamp(value.updated_at, "updated_at");
-  exactKeys(value.baseline, ["commit", "dirty"], "baseline");
+  exactKeys(value.baseline, ["commit", "dirty", "canonical_ref", "canonical_commit"], "baseline");
   if (value.baseline.commit !== null && (typeof value.baseline.commit !== "string" || !/^[a-f0-9]{7,40}$/.test(value.baseline.commit))) fail("baseline.commit must be a Git commit or null.");
   if (typeof value.baseline.dirty !== "boolean") fail("baseline.dirty must be boolean.");
+  if (value.baseline.canonical_ref !== undefined && value.baseline.canonical_ref !== null && (typeof value.baseline.canonical_ref !== "string" || !value.baseline.canonical_ref)) fail("baseline.canonical_ref must be a non-empty string or null.");
+  if (value.baseline.canonical_commit !== undefined && value.baseline.canonical_commit !== null && (typeof value.baseline.canonical_commit !== "string" || !/^[a-f0-9]{7,40}$/.test(value.baseline.canonical_commit))) fail("baseline.canonical_commit must be a Git commit or null.");
   if (typeof value.allow_behind !== "boolean") fail("allow_behind must be boolean.");
   if (value.plan_path !== `${PATHS.chronicles}/${value.id}/plan.md`) fail("plan_path must point to the Voyage Chronicle directory.");
   for (const field of ["proposed_paths", "leased_paths", "navigators"]) stringArray(value[field], field);
@@ -158,6 +161,8 @@ export function getVoyage(root, id) {
 
 export function createVoyage(root, objective, { allowBehind = false } = {}) {
   return withProjectLock(root, "create Voyage", () => {
+    const state = loadState(root);
+    const canonical = assertCanonicalCurrent(root, { config: state.config, action: "Voyage plan", allowBehind });
     const voyages = readVoyages(root);
     const id = nextId(voyages);
     const proposal = cleanText(objective, "A Voyage objective");
@@ -171,7 +176,11 @@ export function createVoyage(root, objective, { allowBehind = false } = {}) {
       status: "planning",
       created_at: now,
       updated_at: now,
-      baseline: gitBaseline(root),
+      baseline: {
+        ...gitBaseline(root),
+        canonical_ref: canonical.ref,
+        canonical_commit: canonical.canonical_commit
+      },
       allow_behind: Boolean(allowBehind),
       plan_path: `${PATHS.chronicles}/${id}/plan.md`,
       proposed_paths: proposedPaths,
@@ -195,8 +204,10 @@ function navigatorsForPaths(state, paths) {
     .sort();
 }
 
-export function activateVoyage(root, id, requestedPaths = []) {
+export function activateVoyage(root, id, requestedPaths = [], { allowBehind = false } = {}) {
   return withProjectLock(root, "activate Voyage", () => {
+    const state = loadState(root);
+    assertCanonicalCurrent(root, { config: state.config, action: "Voyage activation", allowBehind });
     const voyage = getVoyage(root, id);
     if (voyage.status !== "planning") throw new Error(`${id} is ${voyage.status}; only a planning Voyage can activate.`);
     const paths = [...new Set((requestedPaths.length ? requestedPaths : voyage.proposed_paths).map(normalizeVoyagePath))].sort();
@@ -212,8 +223,9 @@ export function activateVoyage(root, id, requestedPaths = []) {
     const activated = event({
       ...voyage,
       status: "active",
+      allow_behind: voyage.allow_behind || Boolean(allowBehind),
       leased_paths: paths,
-      navigators: navigatorsForPaths(loadState(root), paths),
+      navigators: navigatorsForPaths(state, paths),
       scope_source: requestedPaths.length ? "explicit" : "predicted",
       activated_at: now
     }, "activated", now);
@@ -221,21 +233,25 @@ export function activateVoyage(root, id, requestedPaths = []) {
   });
 }
 
-export function resumeVoyage(root, id) {
+export function resumeVoyage(root, id, { allowBehind = false } = {}) {
   return withProjectLock(root, "resume Voyage", () => {
+    const state = loadState(root);
+    assertCanonicalCurrent(root, { config: state.config, action: "Voyage resume", allowBehind });
     const voyage = getVoyage(root, id);
     if (voyage.status !== "planning" && voyage.status !== "active") throw new Error(`${id} is ${voyage.status} and cannot resume.`);
     const now = new Date().toISOString();
-    return writeVoyage(root, event(voyage, "resumed", now));
+    return writeVoyage(root, event({ ...voyage, allow_behind: voyage.allow_behind || Boolean(allowBehind) }, "resumed", now));
   });
 }
 
-export function finishVoyage(root, id) {
+export function finishVoyage(root, id, { allowBehind = false } = {}) {
   return withProjectLock(root, "finish Voyage", () => {
+    const state = loadState(root);
+    assertCanonicalCurrent(root, { config: state.config, action: "Voyage finish", allowBehind });
     const voyage = getVoyage(root, id);
     if (voyage.status !== "active") throw new Error(`${id} is ${voyage.status}; only an active Voyage can finish.`);
     const now = new Date().toISOString();
-    const completed = event({ ...voyage, status: "completed", closed_at: now, final_commit: gitHead(root) }, "completed", now);
+    const completed = event({ ...voyage, status: "completed", allow_behind: voyage.allow_behind || Boolean(allowBehind), closed_at: now, final_commit: gitHead(root) }, "completed", now);
     return writeVoyage(root, completed);
   });
 }

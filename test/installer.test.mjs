@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -12,16 +12,20 @@ const installer = join(packageRoot, "scripts/install-standalone-hooks.mjs");
 test("standalone hook installation preserves settings and is idempotent", () => {
   const sandbox = mkdtempSync(join(tmpdir(), "mauro-hooks-"));
   try {
+    const runtime = join(sandbox, ".mauro");
     const settingsPath = join(sandbox, "settings.json");
     writeFileSync(settingsPath, `${JSON.stringify({
       model: "sonnet",
       hooks: {
-        Stop: [{ hooks: [{ type: "command", command: "existing-command" }] }]
+        Stop: [{ hooks: [
+          { type: "command", command: "existing-command" },
+          { type: "command", command: `node "${join(sandbox, "mauro/bin/mauro")}" hook stop` }
+        ] }]
       }
     }, null, 2)}\n`);
 
     for (let run = 0; run < 2; run += 1) {
-      const result = spawnSync(process.execPath, [installer, sandbox], { encoding: "utf8" });
+      const result = spawnSync(process.execPath, [installer, sandbox, runtime], { encoding: "utf8" });
       assert.equal(result.status, 0, result.stderr);
     }
 
@@ -30,7 +34,8 @@ test("standalone hook installation preserves settings and is idempotent", () => 
     assert.ok(settings.hooks.Stop.some((group) => group.hooks.some((hook) => hook.command === "existing-command")));
     for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
       const commands = settings.hooks[event].flatMap((group) => group.hooks.map((hook) => hook.command));
-      assert.equal(commands.filter((command) => command.includes("mauro/bin/mauro")).length, 1);
+      assert.equal(commands.filter((command) => command.includes("mauro/bin/mauro") || command.includes(".mauro/bin/mauro")).length, 1);
+      assert.ok(commands.some((command) => command.includes(runtime.replace(/\\/g, "/"))));
     }
     assert.ok(readdirSync(sandbox).some((name) => name.startsWith("settings.json.mauro-backup-")));
   } finally {
@@ -38,10 +43,13 @@ test("standalone hook installation preserves settings and is idempotent", () => 
   }
 });
 
-test("install.sh --update replaces the runtime and skill and leaves settings alone", () => {
+test("install.sh --update replaces runtime and skills while safely refreshing hooks", () => {
   const sandbox = mkdtempSync(join(tmpdir(), "mauro-install-"));
   try {
-    const env = { ...process.env, CLAUDE_CONFIG_DIR: sandbox };
+    const runtime = join(sandbox, ".mauro");
+    const claude = join(sandbox, ".claude");
+    const shared = join(sandbox, ".agents/skills");
+    const env = { ...process.env, HOME: sandbox, MAURO_HOME: runtime, CLAUDE_CONFIG_DIR: claude, AGENT_SKILLS_DIR: shared };
     const first = spawnSync("sh", [join(packageRoot, "install.sh"), "--no-hooks"], { encoding: "utf8", env });
     assert.equal(first.status, 0, first.stderr);
     // stdin is a pipe here, so the installer cannot ask. It names both versions and refuses.
@@ -50,25 +58,57 @@ test("install.sh --update replaces the runtime and skill and leaves settings alo
     assert.match(again.stdout, /Mauro \S+ \(.+\) is installed in/);
     assert.match(again.stdout, /This checkout is \S+ \(.+\)/);
     assert.match(again.stdout, /--update/);
-    const stamp = JSON.parse(readFileSync(join(sandbox, "mauro/.install.json"), "utf8"));
+    const stamp = JSON.parse(readFileSync(join(runtime, ".install.json"), "utf8"));
     assert.equal(stamp.version, JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")).version);
     assert.equal(stamp.source, packageRoot);
-    assert.match(spawnSync(process.execPath, [join(sandbox, "mauro/bin/mauro"), "--version"], { encoding: "utf8" }).stdout, /^mauro \S+ \(.+, installed .+ from .+\)/);
+    assert.deepEqual(stamp.hosts, ["claude", "shared"]);
+    assert.match(spawnSync(process.execPath, [join(runtime, "bin/mauro"), "--version"], { encoding: "utf8" }).stdout, /^mauro \S+ \(.+, installed .+ from .+\)/);
+    const doctorRun = spawnSync(process.execPath, [join(runtime, "bin/mauro"), "doctor", "--root", sandbox, "--json"], { encoding: "utf8", env });
+    assert.equal(doctorRun.status, 0, doctorRun.stderr);
+    const doctor = JSON.parse(doctorRun.stdout);
+    assert.equal(doctor.adapters.healthy, true);
+    assert.equal(doctor.adapters.runtime.mode, "standalone-neutral");
+    assert.equal(doctor.adapters.claude.skills.context.present, true);
+    assert.equal(doctor.adapters.shared.skills.administration.present, true);
+    const legacyStamp = { ...stamp };
+    delete legacyStamp.hosts;
+    delete legacyStamp.hooks;
+    writeFileSync(join(runtime, ".install.json"), `${JSON.stringify(legacyStamp, null, 2)}\n`);
+    rmSync(join(shared, "mauro-context"), { recursive: true, force: true });
+    const brokenDoctor = spawnSync(process.execPath, [join(runtime, "bin/mauro"), "doctor", "--root", sandbox, "--json"], { encoding: "utf8", env });
+    assert.equal(brokenDoctor.status, 1);
+    const brokenAdapters = JSON.parse(brokenDoctor.stdout).adapters;
+    assert.deepEqual(brokenAdapters.selected_hosts, ["claude", "shared"]);
+    assert.equal(brokenAdapters.shared.healthy, false);
 
-    const settingsPath = join(sandbox, "settings.json");
+    const settingsPath = join(claude, "settings.json");
     writeFileSync(settingsPath, `${JSON.stringify({ model: "sonnet" })}\n`);
-    const marker = join(sandbox, "mauro/scripts/lib/git.mjs");
+    const marker = join(runtime, "scripts/lib/git.mjs");
     writeFileSync(marker, "// stale installed copy\n");
 
     const update = spawnSync("sh", [join(packageRoot, "install.sh"), "--update"], { encoding: "utf8", env });
     assert.equal(update.status, 0, update.stderr);
     assert.equal(readFileSync(marker, "utf8"), readFileSync(join(packageRoot, "scripts/lib/git.mjs"), "utf8"));
     assert.equal(
-      readFileSync(join(sandbox, "skills/mauro/SKILL.md"), "utf8"),
+      readFileSync(join(claude, "skills/mauro/SKILL.md"), "utf8"),
       readFileSync(join(packageRoot, "skills/mauro/SKILL.md"), "utf8")
     );
-    // --update never runs the hook installer, so settings.json is untouched.
-    assert.deepEqual(JSON.parse(readFileSync(settingsPath, "utf8")), { model: "sonnet" });
+    assert.equal(
+      readFileSync(join(shared, "mauro/SKILL.md"), "utf8"),
+      readFileSync(join(packageRoot, "skills/mauro/SKILL.md"), "utf8")
+    );
+    for (const destination of [join(claude, "skills"), shared]) {
+      assert.equal(
+        readFileSync(join(destination, "mauro-context/SKILL.md"), "utf8"),
+        readFileSync(join(packageRoot, "skills/mauro-context/SKILL.md"), "utf8")
+      );
+    }
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    assert.equal(settings.model, "sonnet");
+    for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
+      const commands = settings.hooks[event].flatMap((group) => group.hooks.map((hook) => hook.command));
+      assert.equal(commands.filter((command) => command.includes(`${runtime}/bin/mauro`)).length, 1);
+    }
 
     const bogus = spawnSync("sh", [join(packageRoot, "install.sh"), "--upgrade"], { encoding: "utf8", env });
     assert.notEqual(bogus.status, 0);
@@ -79,7 +119,86 @@ test("install.sh --update replaces the runtime and skill and leaves settings alo
     assert.equal(yes.status, 0, yes.stdout + yes.stderr);
     assert.match(yes.stdout, /Updated Mauro to/);
     assert.equal(readFileSync(marker, "utf8"), readFileSync(join(packageRoot, "scripts/lib/git.mjs"), "utf8"));
-    assert.deepEqual(JSON.parse(readFileSync(settingsPath, "utf8")), { model: "sonnet" });
+    const refreshed = JSON.parse(readFileSync(settingsPath, "utf8"));
+    assert.equal(refreshed.model, "sonnet");
+    for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
+      const commands = refreshed.hooks[event].flatMap((group) => group.hooks.map((hook) => hook.command));
+      assert.equal(commands.filter((command) => command.includes(`${runtime}/bin/mauro`)).length, 1);
+    }
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("install.sh host profiles install only the requested adapters", () => {
+  for (const target of ["claude", "shared"]) {
+    const sandbox = mkdtempSync(join(tmpdir(), `mauro-${target}-`));
+    try {
+      const runtime = join(sandbox, ".mauro");
+      const claude = join(sandbox, ".claude");
+      const shared = join(sandbox, ".agents/skills");
+      const env = { ...process.env, HOME: sandbox, MAURO_HOME: runtime, CLAUDE_CONFIG_DIR: claude, AGENT_SKILLS_DIR: shared };
+      const result = spawnSync("sh", [join(packageRoot, "install.sh"), "--host", target, "--no-hooks"], { encoding: "utf8", env });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.deepEqual(JSON.parse(readFileSync(join(runtime, ".install.json"), "utf8")).hosts, [target]);
+      const requested = target === "claude" ? join(claude, "skills") : shared;
+      const omitted = target === "claude" ? shared : join(claude, "skills");
+      assert.match(readFileSync(join(requested, "mauro/SKILL.md"), "utf8"), /name: mauro/);
+      assert.match(readFileSync(join(requested, "mauro-context/SKILL.md"), "utf8"), /name: mauro-context/);
+      assert.throws(() => readFileSync(join(omitted, "mauro/SKILL.md"), "utf8"));
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  }
+});
+
+test("install.sh migrates the legacy Claude runtime to the neutral home", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "mauro-legacy-"));
+  try {
+    const runtime = join(sandbox, ".mauro");
+    const claude = join(sandbox, ".claude");
+    const legacy = join(claude, "mauro");
+    const env = { ...process.env, HOME: sandbox, MAURO_HOME: runtime, CLAUDE_CONFIG_DIR: claude, AGENT_SKILLS_DIR: join(sandbox, ".agents/skills") };
+    const first = spawnSync("sh", [join(packageRoot, "install.sh"), "--host", "claude", "--no-hooks"], { encoding: "utf8", env });
+    assert.equal(first.status, 0, first.stdout + first.stderr);
+    renameSync(runtime, legacy);
+
+    const update = spawnSync("sh", [join(packageRoot, "install.sh"), "--update", "--host", "claude", "--no-hooks"], { encoding: "utf8", env });
+    assert.equal(update.status, 0, update.stdout + update.stderr);
+    assert.doesNotThrow(() => readFileSync(join(runtime, "package.json"), "utf8"));
+    assert.throws(() => readFileSync(join(legacy, "package.json"), "utf8"));
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("install.sh refuses a broad runtime target before changing it", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "mauro-unsafe-home-"));
+  try {
+    const marker = join(sandbox, "keep.txt");
+    writeFileSync(marker, "keep\n");
+    const env = { ...process.env, HOME: sandbox, MAURO_HOME: sandbox, CLAUDE_CONFIG_DIR: join(sandbox, ".claude"), AGENT_SKILLS_DIR: join(sandbox, ".agents/skills") };
+    const result = spawnSync("sh", [join(packageRoot, "install.sh"), "--no-hooks"], { encoding: "utf8", env });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Unsafe MAURO_HOME/);
+    assert.equal(readFileSync(marker, "utf8"), "keep\n");
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("doctor accepts Claude hooks from a custom neutral runtime path", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "mauro-custom-runtime-"));
+  try {
+    const runtime = join(sandbox, "runtime");
+    const env = { ...process.env, HOME: sandbox, MAURO_HOME: runtime, CLAUDE_CONFIG_DIR: join(sandbox, ".claude"), AGENT_SKILLS_DIR: join(sandbox, ".agents/skills") };
+    const install = spawnSync("sh", [join(packageRoot, "install.sh"), "--host", "claude"], { encoding: "utf8", env });
+    assert.equal(install.status, 0, install.stdout + install.stderr);
+    const diagnosis = spawnSync(process.execPath, [join(runtime, "bin/mauro"), "doctor", "--root", sandbox, "--json"], { encoding: "utf8", env });
+    assert.equal(diagnosis.status, 0, diagnosis.stderr);
+    const adapters = JSON.parse(diagnosis.stdout).adapters;
+    assert.equal(adapters.runtime.mode, "standalone-neutral");
+    assert.equal(adapters.claude.hooks.current, true);
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }

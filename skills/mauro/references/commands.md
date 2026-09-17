@@ -22,10 +22,12 @@ Use exact command names and aliases. Do not resolve partial names.
 
 | Command | Behavior |
 |---|---|
+| `brief` | Build bounded task context without creating a Voyage. |
 | `charter` | Create, show, update, diff, or validate human intent. |
 | `doctor` | Validate installation, hooks, schemas, and scanners. |
-| `init` | Run the first repository Expedition. |
+| `init` | Ask for and pin the canonical branch, then run the first Expedition. |
 | `navigator` | List, show, regenerate, or request specialist review. |
+| `reconcile` | Refresh derived context when repository evidence changed. |
 | `refit` | Show or propose repository restructuring. |
 | `tool` | List, describe, or run a trusted read-only Toolbox operation. |
 | `who` | Find the responsible Navigator for a path or capability. |
@@ -132,10 +134,11 @@ contract.
 ```
 
 Generated Navigators are views of the approved Map. They are not independent
-knowledge stores. Claude Code sessions that start in the repository discover
-them from `.claude/agents/`. Run `/agents` to list them, or use `who` and
-`impact` to select the relevant Navigator. Restart a session that was already
-open when Mauro generated or changed the files.
+knowledge stores. Claude Code sessions discover them from `.claude/agents/`.
+Compatible agents discover the portable views from `.agents/skills/`. In
+Claude, run `/agents` to list them. In any host, use `who`, `impact`, or `brief`
+to select the relevant Navigator. Restart a session that caches definitions
+when Mauro generated or changed the files.
 
 ## Pull request
 
@@ -164,13 +167,22 @@ packet for each suspect document. `confirm` records a review verdict of
 verification commit. It refuses without an evidence file under
 `docs/mauro/chronicles/`. See `maintenance.md`, section "Document review".
 
+`status` and `check` report Map publication separately from Bearing health.
+`published_with_findings` means semantic capability boundaries are approved,
+but the Bearing is blocked or needs review. Do not collapse these states into
+one success or failure label.
+
 ## Other
 
 ```text
+/mauro init
+mauro init --canonical-ref <selected-branch>
 /mauro next
 /mauro suggest
 /mauro status
 /mauro check
+/mauro brief "<objective>"
+/mauro reconcile [--force]
 /mauro refit propose
 /mauro doctor
 /mauro run "<objective>"

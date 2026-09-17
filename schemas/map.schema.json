@@ -50,9 +50,24 @@
         "gitignored_regions": { "type": "integer", "minimum": 0 },
         "gitignored_scanned_files": { "type": "integer", "minimum": 0 },
         "hidden_ignored_regions": { "type": "integer", "minimum": 0 },
-        "review_required_regions": { "type": "integer", "minimum": 0 }
+        "review_required_regions": { "type": "integer", "minimum": 0 },
+        "instruction_file_warnings": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
+    },
+    "instruction_file_warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "size_bytes", "warning_threshold_bytes", "reason"],
+        "properties": {
+          "path": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 0 },
+          "warning_threshold_bytes": { "type": "integer", "minimum": 1 },
+          "reason": { "const": "host-context-limit" }
+        }
+      }
     },
     "perimeter_regions": { "type": "array", "items": { "$ref": "#/$defs/perimeterRegion" } },
     "files": { "type": "array", "items": { "type": "object" } },

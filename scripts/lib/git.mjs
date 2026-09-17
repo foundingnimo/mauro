@@ -20,7 +20,7 @@ export function gitBaseline(root) {
 export function gitChangedPaths(root, base = null) {
   const args = base
     ? ["diff", "--name-only", "--diff-filter=ACMRTUXB", `${base}...HEAD`]
-    : ["status", "--porcelain"];
+    : ["status", "--porcelain", "--untracked-files=all"];
   const output = git(root, args, "");
   if (!output) return [];
   if (base) return [...new Set(output.split("\n").filter(Boolean))].sort();

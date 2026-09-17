@@ -81,11 +81,14 @@ Run the review when `mauro next` asks for it, at the end of a Voyage, or when
 the user asks. Do not run it for each commit. Each review is an agent run.
 
 1. Run `mauro docs review --json`. Each packet names the document, the changed
-   watches, and the review mode. The command refuses while the branch is behind
-   its upstream, and says how far behind. Rebase or merge first. A review
-   describes the tree it runs against, so a stale checkout gives a confident
-   answer about code that has already changed. `--allow-behind` continues
-   anyway, and the Chronicle must then record that the tree was behind.
+   watches, review mode, and canonical ref and commit. The command refuses when
+   the canonical branch is unpinned or invalid, or the checkout is behind,
+   diverged, or detached. Pinning errors cannot be overridden. Update the
+   branch from canonical history first. A review describes the tree it runs
+   against, so stale accepted history gives
+   a confident answer about code that has already changed. For checkout drift,
+   `--allow-behind` continues anyway, and the Chronicle must record the ref,
+   commit, relationship, and override.
    - `diff` mode: the packet holds the diff and the commit subjects since the
      verification commit, and the untracked files in the watched paths.
    - `full` mode: no usable verification commit exists. The reviewer checks the
@@ -93,15 +96,15 @@ the user asks. Do not run it for each commit. Each review is an agent run.
 2. Launch `mauro-docs-reviewer` for each packet. Give it the packet and the
    repository root. As a plugin, use `foundingnimo:mauro-docs-reviewer`. In a
    standalone installation, give the body of
-   `~/.claude/mauro/agents/mauro-docs-reviewer.md` to an agent that cannot
+   `~/.mauro/agents/mauro-docs-reviewer.md` to an agent that cannot
    write files.
 3. For a binding document, launch two reviewers independently. Treat the
    verdict as `holds` only when both reviewers return `holds`.
 4. Write the Chronicle file
    `docs/mauro/chronicles/reviews/<YYYY-MM-DD>-<document-id>.md`. Record the
-   document, the base commit and HEAD, the changed watches, the commit
-   subjects, each verdict and its confidence, and the claims table. Do not
-   store a raw transcript.
+   document, the base commit, HEAD, canonical ref and commit, the changed
+   watches, the commit subjects, each verdict and its confidence, and the
+   claims table. Do not store a raw transcript.
 5. Act on the verdict:
    - `holds`: run `mauro docs confirm <id> --evidence <file>`. Mauro refreshes
      the fingerprints and records HEAD as the new verification commit.
@@ -113,9 +116,12 @@ the user asks. Do not run it for each commit. Each review is an agent run.
 
 ## Changes outside Mauro
 
-Hooks record changed paths. A Stop hook also scans Git status because shell
-commands can bypass Edit and Write hooks. Session-start checks report suspect
-records. CI can run the same deterministic Bearing check.
+Hooks record changed paths. Stop and SessionStart hooks also inspect Git status
+because shell commands can bypass Edit and Write hooks. Mauro compares a
+path-and-content signature with the last reconciliation, then refreshes the Map
+only when evidence changed. Session-start checks report suspect records. A host
+without Mauro lifecycle hooks runs `mauro reconcile` through the ambient skill.
+CI can run the same deterministic Bearing check.
 
 Never rewrite human-owned documentation silently. Generate a proposal and show
 the diff.

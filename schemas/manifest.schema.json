@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "knowledge", "documents", "navigators"],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
     "knowledge": {
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/knowledge" }
@@ -54,11 +54,12 @@
     },
     "navigator": {
       "type": "object",
-      "required": ["source", "generated_agent", "generated_rule", "primary_paths"],
+      "required": ["source", "generated_agent", "generated_rule", "generated_skill", "primary_paths"],
       "properties": {
         "source": { "type": "string" },
         "generated_agent": { "type": "string" },
         "generated_rule": { "type": "string" },
+        "generated_skill": { "type": "string" },
         "primary_paths": { "type": "array", "items": { "type": "string" } },
         "secondary_paths": { "type": "array", "items": { "type": "string" } }
       },

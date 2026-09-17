@@ -8,6 +8,18 @@
   "properties": {
     "schema_version": { "const": 1 },
     "mode": { "enum": ["observe", "advise", "maintain", "enforce"] },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_ref"],
+      "properties": {
+        "canonical_ref": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
     "scan": {
       "type": "object",
       "additionalProperties": false,

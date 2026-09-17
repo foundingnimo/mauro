@@ -1,14 +1,15 @@
-import { readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { readdirSync, readFileSync, rmdirSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PATHS, SCHEMA_VERSION } from "./constants.mjs";
+import { MANIFEST_SCHEMA_VERSION, PATHS, SCHEMA_VERSION } from "./constants.mjs";
 import { copyTextIfMissing, ensureDir, exists, fingerprintPath, readJson, repoPath, sha256Buffer, watchPathspec, writeJson, writeText } from "./fs.mjs";
 import { gitChangedPaths, gitHead } from "./git.mjs";
 import { scanRepository } from "./inventory.mjs";
 import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions, validateConfig } from "./policy.mjs";
-import { navigatorIdentity, renderClaudeAgent, renderClaudeRule, renderMap, renderNavigatorBrief, slug } from "./render.mjs";
+import { navigatorIdentity, renderAgentSkill, renderClaudeAgent, renderClaudeRule, renderMap, renderNavigatorBrief, slug } from "./render.mjs";
 import { loadToolGapLog } from "./tool-gaps.mjs";
 import { withProjectLock } from "./lock.mjs";
+import { assertCanonicalPinned } from "./freshness.mjs";
 
 export function isInitialized(root) {
   return exists(repoPath(root, PATHS.config)) && exists(repoPath(root, PATHS.map));
@@ -25,12 +26,89 @@ export function loadState(root) {
   };
 }
 
+export function repositoryMigrationStatus(root) {
+  if (!isInitialized(root)) return { required: false, supported: true, initialized: false, manifest_from: null, manifest_to: MANIFEST_SCHEMA_VERSION, reasons: [] };
+  let manifest;
+  try { manifest = readJson(repoPath(root, PATHS.manifest)); } catch {
+    return { required: false, supported: false, initialized: true, manifest_from: null, manifest_to: MANIFEST_SCHEMA_VERSION, reasons: ["manifest-unreadable"] };
+  }
+  const from = manifest.schema_version;
+  if (!Number.isInteger(from) || from < 1 || from > MANIFEST_SCHEMA_VERSION) {
+    return {
+      required: false,
+      supported: false,
+      initialized: true,
+      manifest_from: from ?? null,
+      manifest_to: MANIFEST_SCHEMA_VERSION,
+      reasons: ["unsupported-manifest-schema"]
+    };
+  }
+  const reasons = [];
+  if (from < MANIFEST_SCHEMA_VERSION) reasons.push("manifest-schema");
+  if (Object.values(manifest.navigators || {}).some((navigator) => !navigator.generated_skill)) reasons.push("portable-navigator-views");
+  return {
+    required: reasons.length > 0,
+    supported: true,
+    initialized: true,
+    manifest_from: from,
+    manifest_to: MANIFEST_SCHEMA_VERSION,
+    reasons
+  };
+}
+
 function template(pluginRoot, name) {
   return join(pluginRoot, "templates", name);
 }
 
 function makeDocument(path, criticality, watches, knowledge = []) {
   return { path, status: "current", criticality, watches, knowledge };
+}
+
+function isMauroManagedPath(path) {
+  const value = String(path || "").replace(/\/$/, "");
+  return value === PATHS.state || value.startsWith(`${PATHS.state}/`)
+    || value === PATHS.docs || value.startsWith(`${PATHS.docs}/`)
+    || value === ".claude" || value.startsWith(".claude/")
+    || value === ".agents" || value.startsWith(".agents/");
+}
+
+function relevantChangedPaths(paths) {
+  return [...new Set((paths || [])
+    .map((path) => String(path).replace(/\/$/, ""))
+    .filter((path) => path && !path.startsWith("../") && !isMauroManagedPath(path)))]
+    .sort();
+}
+
+function changedPathSignature(root, paths) {
+  const evidence = relevantChangedPaths(paths).map((path) => {
+    try {
+      return [path, fingerprintPath(root, path, [], { maxFileSize: 2 * 1024 * 1024 })];
+    } catch {
+      return [path, "unreadable"];
+    }
+  });
+  return sha256Buffer(Buffer.from(JSON.stringify(evidence)));
+}
+
+function reconciliationState(root) {
+  const paths = relevantChangedPaths(gitChangedPaths(root));
+  return {
+    schema_version: SCHEMA_VERSION,
+    updated_at: new Date().toISOString(),
+    observed_paths: paths,
+    git_signature: changedPathSignature(root, paths)
+  };
+}
+
+function markReconciled(root, scanStarted = null) {
+  const current = reconciliationState(root);
+  const changedDuringScan = Boolean(scanStarted && scanStarted.git_signature !== current.git_signature);
+  writeJson(repoPath(root, PATHS.changes), {
+    schema_version: SCHEMA_VERSION,
+    paths: changedDuringScan ? current.observed_paths : []
+  });
+  writeJson(repoPath(root, PATHS.reconciliation), current);
+  return { complete: !changedDuringScan, pending_paths: changedDuringScan ? current.observed_paths : [] };
 }
 
 export const VERIFICATION_FIELDS = Object.freeze(["verified_commit", "verified_at", "verified_dirty", "verified_evidence"]);
@@ -75,12 +153,18 @@ function removeGeneratedView(root, path, prefix, requiredNamePrefix = "") {
   unlinkSync(absolute);
 }
 
+function removeGeneratedSkill(root, path) {
+  removeGeneratedView(root, path, PATHS.agentSkills);
+  if (!path?.startsWith(`${PATHS.agentSkills}/`) || !path.endsWith("/SKILL.md")) return;
+  try { rmdirSync(dirname(repoPath(root, path))); } catch {}
+}
+
 function rebuildViews(root, map, previousManifest = null) {
   const preservedDocuments = Object.fromEntries(
     Object.entries(previousManifest?.documents || {}).filter(([id]) => id !== "doc-map" && id !== "doc-charter" && !id.startsWith("navigator-"))
   );
   const manifest = {
-    schema_version: SCHEMA_VERSION,
+    schema_version: MANIFEST_SCHEMA_VERSION,
     knowledge: previousManifest?.knowledge || {},
     documents: preservedDocuments,
     navigators: {}
@@ -96,13 +180,16 @@ function rebuildViews(root, map, previousManifest = null) {
     const source = `${PATHS.navigators}/${capabilitySlug}.md`;
     const agent = `${PATHS.agents}/${identity}.md`;
     const rule = `${PATHS.rules}/${capabilitySlug}.md`;
+    const agentSkill = `${PATHS.agentSkills}/${identity}/SKILL.md`;
     writeText(repoPath(root, source), renderNavigatorBrief(capability));
     writeText(repoPath(root, agent), renderClaudeAgent(capability, source));
     writeText(repoPath(root, rule), renderClaudeRule(capability, source));
+    writeText(repoPath(root, agentSkill), renderAgentSkill(capability, source));
     manifest.navigators[identity] = {
       source,
       generated_agent: agent,
       generated_rule: rule,
+      generated_skill: agentSkill,
       primary_paths: capability.primary_paths,
       secondary_paths: capability.secondary_paths,
       approved: capability.approved === true
@@ -118,6 +205,7 @@ function rebuildViews(root, map, previousManifest = null) {
     removeGeneratedView(root, previous.source, PATHS.navigators);
     removeGeneratedView(root, previous.generated_agent, PATHS.agents, "mauro-");
     removeGeneratedView(root, previous.generated_rule, PATHS.rules);
+    removeGeneratedSkill(root, previous.generated_skill);
   }
   return manifest;
 }
@@ -146,18 +234,24 @@ export function buildFingerprints(root, manifest, config, map) {
   return fingerprints;
 }
 
-function initializeUnlocked(root, pluginRoot) {
+function initializeUnlocked(root, pluginRoot, { canonicalRef = null } = {}) {
   if (isInitialized(root)) {
     throw new Error("Mauro is already initialized. Use `mauro map update`.");
   }
+  const scanStarted = reconciliationState(root);
   const context = verificationContext(root);
   const configPath = repoPath(root, PATHS.config);
-  const config = validateConfig(exists(configPath) ? readJson(configPath) : readJson(template(pluginRoot, "config.json")));
+  const configExists = exists(configPath);
+  const sourceConfig = configExists ? readJson(configPath) : readJson(template(pluginRoot, "config.json"));
+  const config = validateConfig(canonicalRef === null
+    ? sourceConfig
+    : { ...sourceConfig, git: { ...sourceConfig.git, canonical_ref: canonicalRef } });
+  const canonical = assertCanonicalPinned(root, { config, action: "initialization" });
   const map = scanRepository(root, config);
-  for (const path of [PATHS.state, PATHS.voyages, PATHS.docs, PATHS.knowledge, PATHS.navigators, PATHS.chronicles, PATHS.artifacts, PATHS.rules, PATHS.agents]) {
+  for (const path of [PATHS.state, PATHS.voyages, PATHS.docs, PATHS.knowledge, PATHS.navigators, PATHS.chronicles, PATHS.artifacts, PATHS.rules, PATHS.agents, PATHS.agentSkills]) {
     ensureDir(repoPath(root, path));
   }
-  copyTextIfMissing(template(pluginRoot, "config.json"), repoPath(root, PATHS.config));
+  if (!configExists || canonicalRef !== null) writeJson(repoPath(root, PATHS.config), config);
   copyTextIfMissing(template(pluginRoot, "charter.md"), repoPath(root, PATHS.charter));
   copyTextIfMissing(template(pluginRoot, "tool-gaps.json"), repoPath(root, PATHS.toolGaps));
   writeJson(repoPath(root, PATHS.map), map);
@@ -166,12 +260,12 @@ function initializeUnlocked(root, pluginRoot) {
   writeJson(repoPath(root, PATHS.manifest), manifest);
   const fingerprints = buildFingerprints(root, manifest, config, map);
   writeJson(repoPath(root, PATHS.fingerprints), fingerprints);
-  writeJson(repoPath(root, PATHS.changes), { schema_version: 1, paths: [] });
-  return { map, manifest, fingerprints };
+  const reconciliation = markReconciled(root, scanStarted);
+  return { map, manifest, fingerprints, reconciliation, canonical };
 }
 
-export function initialize(root, pluginRoot) {
-  return withProjectLock(root, "initialize repository", () => initializeUnlocked(root, pluginRoot));
+export function initialize(root, pluginRoot, options = {}) {
+  return withProjectLock(root, "initialize repository", () => initializeUnlocked(root, pluginRoot, options));
 }
 
 function isSemanticCapability(capability) {
@@ -217,6 +311,11 @@ export function mergeCapabilities(previousCapabilities, scannedCapabilities, uni
 }
 
 function updateMapUnlocked(root) {
+  const scanStarted = reconciliationState(root);
+  const migration = repositoryMigrationStatus(root);
+  if (!migration.supported) {
+    throw new Error(`Repository context cannot be migrated automatically: ${migration.reasons.join(", ")}.`);
+  }
   const current = loadState(root);
   const context = verificationContext(root);
   const scanned = scanRepository(root, current.config);
@@ -262,11 +361,52 @@ function updateMapUnlocked(root) {
     ]))
   };
   writeJson(repoPath(root, PATHS.fingerprints), fingerprints);
-  return { map, manifest, fingerprints };
+  const reconciliation = markReconciled(root, scanStarted);
+  return { map, manifest, fingerprints, reconciliation };
 }
 
 export function updateMap(root) {
   return withProjectLock(root, "update Map and generated views", () => updateMapUnlocked(root));
+}
+
+export function reconcile(root, { observedPaths = gitChangedPaths(root), force = false } = {}) {
+  return withProjectLock(root, "reconcile repository context", () => {
+    const migration = repositoryMigrationStatus(root);
+    if (!migration.supported) {
+      throw new Error(`Repository context cannot be migrated automatically: ${migration.reasons.join(", ")}.`);
+    }
+    const queuePath = repoPath(root, PATHS.changes);
+    let queued = [];
+    try { queued = readJson(queuePath).paths || []; } catch {}
+    const observed = relevantChangedPaths(observedPaths);
+    const signature = changedPathSignature(root, observed);
+    let previous = null;
+    try { previous = readJson(repoPath(root, PATHS.reconciliation)); } catch {}
+    const newlyObserved = previous?.git_signature === signature ? [] : observed;
+    const paths = relevantChangedPaths([...queued, ...newlyObserved]);
+    if (!force && !migration.required && paths.length === 0) {
+      if (previous?.git_signature !== signature) {
+        writeJson(repoPath(root, PATHS.reconciliation), {
+          schema_version: SCHEMA_VERSION,
+          updated_at: new Date().toISOString(),
+          observed_paths: observed,
+          git_signature: signature
+        });
+      }
+      return { updated: false, paths: [], migration, reason: "Repository evidence has not changed since the last reconciliation." };
+    }
+    const result = updateMapUnlocked(root);
+    return {
+      updated: true,
+      paths: force && paths.length === 0 ? ["**"] : paths,
+      files: result.map.files.length,
+      units: result.map.units.length,
+      capabilities: result.map.capabilities.length,
+      complete: result.reconciliation.complete,
+      pending_paths: result.reconciliation.pending_paths,
+      migration: { ...migration, completed: migration.required }
+    };
+  });
 }
 
 export function readKnowledgeFiles(root) {

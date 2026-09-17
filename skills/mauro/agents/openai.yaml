@@ -1,0 +1,6 @@
+interface:
+  display_name: "Mauro Administration"
+  short_description: "Run an explicit Mauro administration command"
+  default_prompt: "Use $mauro to show the repository context status."
+policy:
+  allow_implicit_invocation: false

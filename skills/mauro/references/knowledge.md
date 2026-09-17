@@ -1,7 +1,7 @@
 # Knowledge workflow
 
-Canonical knowledge lives in `docs/mauro/knowledge/`. Generated Claude rules
-are delivery views, not independent sources.
+Canonical knowledge lives in `docs/mauro/knowledge/`. Generated host rules and
+skills are delivery views, not independent sources.
 
 ## Admission test
 
@@ -62,6 +62,13 @@ The context verifier checks:
 
 `propose`, `update`, and `retire` create drafts. Show the diff. Apply only after
 approval and context verification.
+
+Before an agent applies an approved knowledge mutation, inspect the canonical
+relationship in `mauro status --json`. An unpinned or invalid branch cannot be
+overridden. Stop when the checkout is behind, diverged, or detached. Mauro does
+not fetch or modify Git. If the user deliberately accepts checkout drift,
+record the canonical ref, commit, relationship, and approval in Chronicle
+before writing.
 
 After an approved mutation, regenerate the matching file under
 `.claude/rules/mauro/` and update `.mauro/manifest.json`.

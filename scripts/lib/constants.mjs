@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 // and scripts/sync-version.mjs copies it into the plugin manifest.
 export const MAURO_VERSION = JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../package.json"), "utf8")).version;
 export const SCHEMA_VERSION = 1;
+export const MANIFEST_SCHEMA_VERSION = 2;
 export const MAX_PERIMETER_REGIONS = 500;
+export const INSTRUCTION_FILE_WARNING_BYTES = 150_000;
 
 export const PATHS = Object.freeze({
   state: ".mauro",
@@ -15,6 +17,7 @@ export const PATHS = Object.freeze({
   manifest: ".mauro/manifest.json",
   fingerprints: ".mauro/fingerprints.json",
   changes: ".mauro/changed-paths.json",
+  reconciliation: ".mauro/reconciliation.json",
   toolGaps: ".mauro/tool-gaps.json",
   voyages: ".mauro/voyages",
   docs: "docs/mauro",
@@ -25,13 +28,15 @@ export const PATHS = Object.freeze({
   chronicles: "docs/mauro/chronicles",
   artifacts: "docs/mauro/artifacts",
   rules: ".claude/rules/mauro",
-  agents: ".claude/agents"
+  agents: ".claude/agents",
+  agentSkills: ".agents/skills"
 });
 
 export const HARD_EXCLUDES = Object.freeze([
   ".git/**",
   ".mauro/**",
   ".claude/**",
+  ".agents/**",
   "docs/mauro/**",
   "node_modules/**",
   ".venv/**",
@@ -51,12 +56,8 @@ export const HARD_EXCLUDES = Object.freeze([
 ]);
 
 export const DEFAULT_GENERATED_PATTERNS = Object.freeze([
-  "vendor/**",
-  "**/vendor/**",
   "dist/**",
   "**/dist/**",
-  "build/**",
-  "**/build/**",
   "coverage/**",
   "**/coverage/**",
   ".next/**",
@@ -122,7 +123,7 @@ export const ALIASES = Object.freeze({
 });
 
 export const PUBLIC_COMMANDS = Object.freeze([
-  "charter", "check", "docs", "doctor", "help", "impact", "init",
-  "knowledge", "map", "navigator", "next", "pr", "refit", "run", "status",
-  "tool", "where", "who", "why"
+  "brief", "charter", "check", "docs", "doctor", "help", "impact", "init",
+  "knowledge", "map", "navigator", "next", "pr", "reconcile", "refit", "run",
+  "status", "tool", "where", "who", "why"
 ]);
