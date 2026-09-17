@@ -12,6 +12,15 @@ Status values:
 
 ## Now
 
+### Expedition dogfood follow-ups
+
+- [ ] Make mapper isolation enforceable on hosts that ignore agent tool
+  restrictions.
+- [ ] Verify that a clean Expedition cannot reuse old generated Navigator names.
+- [ ] Remove duplicated decision blocks from host-rendered command responses.
+- [ ] Re-run the large-monorepo Map gate with validated reports and compare its
+  capability boundaries with the rejected draft.
+
 ### Consistent multi-session reads
 
 Goal: Let several coding-agent sessions use one repository without losing Mauro
@@ -110,6 +119,19 @@ state or performing overlapping work by accident.
 - [ ] Keep every external pull-request write behind explicit authorization.
 
 ## Completed
+
+### Validated Expedition survey handoff
+
+- [x] Define one stable report contract for structure, capability,
+  documentation, and duplication surveys.
+- [x] Add a read-only validator for JSON shape, role, baseline, paths, globs,
+  confidence, Tool Gaps, report size, and deterministic coverage.
+- [x] Give every top-level mapper an isolated report path and block synthesis
+  until all four reports validate.
+- [x] Prevent bundled survey agents and the synthesizer from nested delegation.
+- [x] Keep pre-publication document discovery on the deterministic Map instead
+  of the manifest-backed documentation index.
+- [x] Tell capability mapping to ignore existing generated Navigator names.
 
 ### Ambient and provider-neutral operation
 

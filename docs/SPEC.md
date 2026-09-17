@@ -61,13 +61,29 @@ automatic migration and requires a newer tool or manual recovery.
    before semantic surveys. The warning does not block the scan.
 4. Use independent read-only surveys for structure, capabilities, documents,
    and duplication.
-5. Cite file or test evidence for semantic claims.
-6. State confidence for inferred relationships.
-7. Keep the Map separate from the Charter.
-8. Show unresolved ownership and contradictory evidence.
-9. Ask a person to approve semantic boundaries.
-10. Generate scoped Navigators and rules from approved sources.
-11. Do not modify product code or add inline markers during initialization.
+5. Launch one top-level mapper for each role. Mapper agents must not delegate
+   or write a shared report file. Existing generated Navigators must not prime
+   a new survey.
+6. Store each return in an isolated caller-owned file. Validate its role,
+   schema, size, deterministic baseline, paths, glob syntax, confidence, Tool
+   Gap shape, and inventory coverage before synthesis. A failure blocks
+   synthesis.
+7. Cite file or test evidence for semantic claims.
+8. State confidence for inferred relationships.
+9. Keep the Map separate from the Charter.
+10. Show unresolved ownership and contradictory evidence.
+11. Ask a person to approve semantic boundaries.
+12. Generate scoped Navigators and rules from approved sources.
+13. Do not modify product code or add inline markers during initialization.
+
+Survey reports use `schemas/survey-report.schema.json`. Their baseline contains
+the deterministic Map commit, Map generation time, and configuration digest.
+The validator also refuses repository evidence that changed after the Map was
+created. Repository patterns can use literal text, `*`, `**`, and `?`; brace
+and character-class globs are not supported. The validator returns all
+detected errors and uses a failing exit status for an invalid report. The
+synthesizer accepts only four successful validation results and must not
+delegate.
 
 ## Scan configuration
 

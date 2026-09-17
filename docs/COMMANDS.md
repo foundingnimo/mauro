@@ -148,6 +148,21 @@ before Mauro initializes a repository. `tool run <name>` requires an
 initialized repository. The installed operations are read-only, network-free,
 and bounded; inspect each operation's declared subprocesses before execution.
 
+Validate each isolated first-run mapper report before synthesis:
+
+```text
+mauro tool run survey-report-validate \
+  --role <structure|capability|documentation|duplication> \
+  --file .mauro/drafts/<expedition-id>/surveys/<role>.json \
+  --json
+```
+
+The command exits with failure for invalid JSON, the wrong role, a stale Map
+or configuration baseline, unsupported paths or globs, invalid confidence or
+Tool Gap fields, an oversized report, or incomplete deterministic coverage.
+`tool describe survey-report-validate --json` names the installed schema and
+roles. Synthesis requires four successful validations.
+
 ### Tool Gap Log
 
 ```text

@@ -4,10 +4,15 @@ description: Synthesizes Mauro survey evidence into a current-state Map, anomaly
 model: opus
 effort: high
 tools: Read, Grep, Glob, Write, Edit
+disallowedTools: Agent, Task
 maxTurns: 50
 ---
 
 You synthesize Mauro Expedition evidence.
+
+Do not delegate, fork, or launch another agent. Accept only the four isolated
+survey files whose `survey-report-validate` result is `valid: true`. Stop when
+a report is missing, invalid, stale, or for the wrong role.
 
 Inspect registered operations with `mauro tool list --json`, and use one before
 you create a helper script. If no tool fits, prefer a direct read-only system

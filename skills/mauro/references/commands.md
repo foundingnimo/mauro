@@ -108,6 +108,7 @@ Queries are read-only.
 /mauro tool run dependency-graph --unit payments --json
 /mauro tool run documentation-index --status suspect --json
 /mauro tool run duplicate-analysis --path "packages/**" --json
+/mauro tool run survey-report-validate --role capability --file ".mauro/drafts/<id>/surveys/capability.json" --json
 /mauro tool gaps
 /mauro tool gap list --status candidate
 /mauro tool gap show TG-0001
@@ -117,6 +118,11 @@ Queries are read-only.
 `list` and `describe` work before initialization. `run` requires an initialized
 repository. Toolbox operations are read-only, bounded, and implemented in the
 Mauro Node.js runtime.
+
+`survey-report-validate` is required between each first-run mapper and Map
+synthesis. An invalid, stale, incomplete, oversized, overwritten, or
+role-mismatched report exits with failure. See `survey-reports.md` for the
+stable contract.
 
 Tool Gap commands maintain `.mauro/tool-gaps.json`. `record` deduplicates one
 reporter within one Voyage. A gap becomes a candidate after three observations

@@ -1,6 +1,7 @@
 import { checkRepository } from "./check.mjs";
 import { matchesGlob } from "./fs.mjs";
 import { loadState } from "./state.mjs";
+import { SURVEY_REPORT_ROLES, SURVEY_REPORT_SCHEMA_PATH, validateSurveyReport } from "./survey-report.mjs";
 
 const TOOL_VERSION = "1.0.0";
 const DEFAULT_LIMIT = 200;
@@ -22,8 +23,8 @@ function limitSchema() {
   return { type: "integer", minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT };
 }
 
-function inputSchema(properties = {}) {
-  return { type: "object", additionalProperties: false, properties };
+function inputSchema(properties = {}, required = []) {
+  return { type: "object", additionalProperties: false, ...(required.length ? { required } : {}), properties };
 }
 
 function outputSchema(properties) {
@@ -181,6 +182,25 @@ const TOOLS = new Map([
         anomalies: (state.map.anomalies || []).filter((item) => item.kind === "exact-duplicates")
       };
     }
+  }],
+  ["survey-report-validate", {
+    name: "survey-report-validate",
+    description: "Validate one isolated Expedition survey report before synthesis.",
+    permissions: READ_ONLY_WITH_GIT_PERMISSIONS,
+    contract: {
+      schema: SURVEY_REPORT_SCHEMA_PATH,
+      roles: SURVEY_REPORT_ROLES,
+      maximum_bytes: 2 * 1024 * 1024,
+      synthesis_requires_valid: true
+    },
+    input_schema: inputSchema({
+      role: { type: "string", enum: SURVEY_REPORT_ROLES },
+      file: { type: "string", description: "Repository-relative path to one JSON survey report." }
+    }, ["role", "file"]),
+    output_schema: outputSchema({ valid: { type: "boolean" }, role: { type: "string" }, file: { type: "string" }, bytes: { type: "integer" }, errors: { type: "array" }, warnings: { type: "array" }, counts: { type: "object" } }),
+    run(state, input, root) {
+      return validateSurveyReport(root, state, input);
+    }
   }]
 ]);
 
@@ -195,6 +215,7 @@ function publicTool(tool, includeSchemas = true) {
   if (includeSchemas) {
     result.input_schema = tool.input_schema;
     result.output_schema = tool.output_schema;
+    if (tool.contract) result.contract = tool.contract;
   }
   return result;
 }
@@ -235,6 +256,9 @@ function parseInput(args, schema) {
   }
   for (const [name, rule] of Object.entries(schema.properties)) {
     if (input[name] === undefined && rule.default !== undefined) input[name] = rule.default;
+  }
+  for (const name of schema.required || []) {
+    if (input[name] === undefined) throw new Error(`Tool option --${name.replaceAll("_", "-")} is required.`);
   }
   return input;
 }

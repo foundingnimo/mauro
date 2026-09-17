@@ -30,8 +30,15 @@ test("README lists every public command and frequent alias", () => {
 test("README overview includes durable coordination state", () => {
   const overview = section("# Mauro", "## Quickstart");
   assert.doesNotMatch(overview, /Mauro has four durable outputs/);
-  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal", "Map-publication", "Instruction Contracts"]) {
+  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal", "Map-publication", "Instruction Contracts", "validation of isolated Expedition survey reports"]) {
     assert.ok(overview.includes(text), `README overview is missing: ${text}`);
+  }
+});
+
+test("README documents the survey validation gate", () => {
+  const toolbox = section("## Toolbox", "## Document review");
+  for (const text of ["survey-report-validate", "structure", "capability", "documentation", "duplication", "Synthesis stops"]) {
+    assert.ok(toolbox.includes(text), `README survey validation guidance is missing: ${text}`);
   }
 });
 

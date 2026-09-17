@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a deterministic, role-specific Expedition survey-report validator that
+  checks JSON, baseline, paths, glob syntax, confidence, Tool Gap fields,
+  report size, and inventory coverage before synthesis.
+- Isolate the four mapper reports and stop bundled survey agents and the
+  synthesizer from nested delegation.
+- Keep first-run document discovery on deterministic inventory and prevent old
+  generated Navigator names from priming capability surveys.
+
 ## 0.2.1 (2026-09-17)
 
 - Treat agent instruction files as first-class, human-owned Instruction

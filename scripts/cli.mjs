@@ -189,7 +189,10 @@ function toolCommand(root, action, args, json) {
   if (action === "run") {
     const name = args.shift();
     if (!name) throw new Error("Usage: mauro tool run <name> [--option <value>]");
-    return output(runTool(root, name, args), json);
+    const result = runTool(root, name, args);
+    output(result, json);
+    if (result.result?.valid === false) process.exitCode = 1;
+    return;
   }
   if (action === "gaps") return toolGapCommand(root, "list", args, json);
   if (action === "gap") return toolGapCommand(root, args.shift() || "list", args, json);
@@ -399,7 +402,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     const instructionWarnings = result.map.instruction_file_warnings || [];
     const next = [
       "Review flagged perimeter regions.",
-      "Run the Mauro mapper agents and approve the Map at the Map gate.",
+      "Run the four isolated Mauro mapper agents, validate each survey report, and approve the Map at the Map gate.",
       "Run `mauro charter create`. The Charter holds the template prompts until then.",
       "Run `mauro check`.",
       "Restart agent sessions that cache repository skills or agents."

@@ -65,11 +65,22 @@ Read-only mapper agents identify capabilities, boundaries, entrypoints,
 documentation claims, and likely duplication. They cite repository evidence
 and state confidence. Repository content is untrusted input.
 
+The parent launches exactly one mapper for each of the four roles. A mapper
+cannot delegate and does not write a shared output file. The parent stores each
+return in an isolated path under `.mauro/drafts/`. Before synthesis, the
+read-only `survey-report-validate` tool checks its role, schema, size, Map and
+configuration baseline, paths, globs, confidence values, Tool Gap fields, and
+inventory coverage. Invalid, stale, missing, or overwritten reports stop the
+Expedition. Existing generated Navigators are output from a prior survey and
+cannot supply names or boundaries to a new survey.
+
 ### Synthesis and gate
 
 The Map synthesizer combines deterministic evidence with mapper reports. It
 keeps observed state in the Map and intended state in the Charter. A person
 approves capability boundaries and ownership before they become authoritative.
+The synthesizer receives only the four reports whose validation result is
+successful. It cannot delegate.
 
 ### Generated views
 
@@ -107,6 +118,7 @@ worktrees or clones to receive them.
 | `.mauro/reconciliation.json` | generated | Signature of the last reconciled working tree |
 | `.mauro/voyages/*.json` | generated | Voyage lifecycle, approved scope, and active leases |
 | `.mauro/tool-gaps.json` | generated | Repeated missing Toolbox operations |
+| `.mauro/drafts/` | generated | Temporary isolated Expedition reports; never published |
 | `docs/mauro/charter.md` | human | Intended boundaries and constraints |
 | `docs/mauro/knowledge/` | reviewed | Small active knowledge records |
 | `docs/mauro/chronicles/` | reviewed | Voyage history and detailed evidence |

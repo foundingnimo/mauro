@@ -61,19 +61,28 @@ test("Toolbox discovery works before repository initialization", () => {
     "repository-files",
     "dependency-graph",
     "documentation-index",
-    "duplicate-analysis"
+    "duplicate-analysis",
+    "survey-report-validate"
   ]);
   assert.ok(tools.every((tool) => tool.runtime === "node"));
   assert.ok(tools.every((tool) => tool.permissions.repository_read && !tool.permissions.repository_write && !tool.permissions.network));
-  assert.deepEqual(tools.find((tool) => tool.name === "documentation-index").permissions.subprocesses, ["git"]);
-  assert.ok(tools.filter((tool) => tool.name !== "documentation-index").every((tool) => tool.permissions.subprocesses.length === 0));
+  for (const name of ["documentation-index", "survey-report-validate"]) {
+    assert.deepEqual(tools.find((tool) => tool.name === name).permissions.subprocesses, ["git"]);
+  }
+  assert.ok(tools.filter((tool) => !["documentation-index", "survey-report-validate"].includes(tool.name)).every((tool) => tool.permissions.subprocesses.length === 0));
 
   const described = run("tool", "describe", "repository-files", "--root", sandbox, "--json");
   assert.equal(described.status, 0, described.stderr);
   assert.equal(JSON.parse(described.stdout).input_schema.properties.limit.maximum, 1000);
 
+  const surveyValidator = JSON.parse(run("tool", "describe", "survey-report-validate", "--root", sandbox, "--json").stdout);
+  assert.deepEqual(surveyValidator.input_schema.required, ["role", "file"]);
+  assert.equal(surveyValidator.contract.schema, "schemas/survey-report.schema.json");
+  assert.deepEqual(surveyValidator.contract.roles, ["structure", "capability", "documentation", "duplication"]);
+
   assert.equal(run("tool", "list", "unexpected", "--root", sandbox).status, 1);
   assert.equal(run("tool", "run", "repository-files", "--root", sandbox).status, 1);
+  assert.equal(run("tool", "run", "survey-report-validate", "--role", "capability", "--root", sandbox).status, 1);
 });
 
 test("init requires the user-selected exact canonical branch", () => {
@@ -315,6 +324,117 @@ test("Toolbox runs bounded repository analysis without generated scripts", () =>
   const duplicatesResult = run("tool", "run", "duplicate-analysis", "--path", "packages/auth/**", "--root", sandbox, "--json");
   assert.equal(duplicatesResult.status, 0, duplicatesResult.stderr);
   assert.ok(JSON.parse(duplicatesResult.stdout).result.groups.some((group) => group.paths.includes("packages/auth/src/token-copy.ts")));
+});
+
+test("survey reports are role-specific, baseline-bound, and validated before synthesis", () => {
+  writeFileSync(join(sandbox, "AGENTS.md"), "Use repository evidence.\n");
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  const map = readMap();
+  const fingerprints = JSON.parse(readFileSync(join(sandbox, ".mauro/fingerprints.json"), "utf8"));
+  const reportPath = ".mauro/drafts/test/capability.json";
+  mkdirSync(join(sandbox, ".mauro/drafts/test"), { recursive: true });
+  const report = {
+    schema_version: 1,
+    role: "capability",
+    baseline: {
+      commit: map.baseline.commit,
+      config_digest: fingerprints.config_digest,
+      map_generated_at: map.generated_at
+    },
+    summary: "Each deterministic unit has one draft capability.",
+    findings: [],
+    unresolved: [],
+    tool_gaps: [],
+    capabilities: map.units.map((unit) => ({
+      id: `cap-${unit.id.replace(/^unit-/, "")}`,
+      name: `${unit.name} capability`,
+      purpose: `Own ${unit.name}.`,
+      units: [unit.id],
+      primary_paths: [unit.root === "." ? "**" : `${unit.root}/**`],
+      secondary_paths: [],
+      evidence: [unit.manifest || unit.root],
+      confidence: 0.8
+    }))
+  };
+  const absolute = join(sandbox, reportPath);
+  writeFileSync(absolute, `${JSON.stringify(report, null, 2)}\n`);
+
+  const valid = run("tool", "run", "survey-report-validate", "--role", "capability", "--file", reportPath, "--root", sandbox, "--json");
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.equal(JSON.parse(valid.stdout).result.valid, true);
+  assert.equal(JSON.parse(valid.stdout).result.counts.capabilities, map.units.length);
+
+  const common = (role, summary) => ({
+    schema_version: 1,
+    role,
+    baseline: report.baseline,
+    summary,
+    findings: [],
+    unresolved: [],
+    tool_gaps: []
+  });
+  const roleReports = {
+    structure: {
+      ...common("structure", "The deterministic units have verified structure."),
+      units: map.units.map((unit) => ({ id: unit.id, name: unit.name, root: unit.root, purpose: `Own ${unit.name}.`, evidence: [unit.manifest || unit.root], confidence: 0.9 })),
+      dependencies: map.dependencies.map((edge) => ({ ...edge, confidence: 0.9 })),
+      entrypoints: [],
+      tests: []
+    },
+    documentation: {
+      ...common("documentation", "Documents and Instruction Contracts are classified."),
+      documents: map.documents
+        .filter((document) => !(map.instruction_contracts || []).some((contract) => contract.path === document.path))
+        .map((document, index) => ({ id: `document-${index + 1}`, path: document.path, classification: "current", criticality: "informational", claims: [], watches: [], evidence: [document.path], confidence: 0.8 })),
+      instruction_contracts: (map.instruction_contracts || []).map((contract) => ({ id: contract.id, path: contract.path, providers: contract.providers, scope: contract.scope, parent: contract.parent, precedence: contract.precedence, evidence: [contract.path], confidence: 1 }))
+    },
+    duplication: {
+      ...common("duplication", "Deterministic duplicate groups are reviewed."),
+      duplicate_groups: (map.duplicate_groups || []).map((group) => ({ kind: "exact-duplicate", paths: group.paths, evidence: group.paths, confidence: 1 }))
+    }
+  };
+  for (const [role, roleReport] of Object.entries(roleReports)) {
+    const rolePath = `.mauro/drafts/test/${role}.json`;
+    writeFileSync(join(sandbox, rolePath), `${JSON.stringify(roleReport, null, 2)}\n`);
+    const checked = run("tool", "run", "survey-report-validate", "--role", role, "--file", rolePath, "--root", sandbox, "--json");
+    assert.equal(checked.status, 0, `${role}: ${checked.stdout}\n${checked.stderr}`);
+    assert.equal(JSON.parse(checked.stdout).result.valid, true);
+  }
+
+  report.capabilities[0].primary_paths = ["{apps,packages}/**"];
+  writeFileSync(absolute, `${JSON.stringify(report, null, 2)}\n`);
+  const unsupportedGlob = run("tool", "run", "survey-report-validate", "--role", "capability", "--file", reportPath, "--root", sandbox, "--json");
+  assert.equal(unsupportedGlob.status, 1);
+  assert.ok(JSON.parse(unsupportedGlob.stdout).result.errors.some((item) => item.code === "unsupported-glob"));
+
+  report.capabilities[0].primary_paths = ["**"];
+  report.capabilities[0].units = [];
+  writeFileSync(absolute, `${JSON.stringify(report, null, 2)}\n`);
+  const incomplete = run("tool", "run", "survey-report-validate", "--role", "capability", "--file", reportPath, "--root", sandbox, "--json");
+  assert.equal(incomplete.status, 1);
+  assert.ok(JSON.parse(incomplete.stdout).result.errors.some((item) => item.code === "coverage-missing"));
+
+  report.capabilities[0].units = [map.units[0].id];
+  report.role = "duplication";
+  writeFileSync(absolute, `${JSON.stringify(report, null, 2)}\n`);
+  const overwritten = run("tool", "run", "survey-report-validate", "--role", "capability", "--file", reportPath, "--root", sandbox, "--json");
+  assert.equal(overwritten.status, 1);
+  assert.ok(JSON.parse(overwritten.stdout).result.errors.some((item) => item.code === "role-mismatch"));
+
+  writeFileSync(absolute, "{not json\n");
+  const invalidJson = run("tool", "run", "survey-report-validate", "--role", "capability", "--file", reportPath, "--root", sandbox, "--json");
+  assert.equal(invalidJson.status, 1);
+  assert.ok(JSON.parse(invalidJson.stdout).result.errors.some((item) => item.code === "invalid-json"));
+
+  report.role = "capability";
+  report.capabilities[0].units = [map.units[0].id];
+  writeFileSync(absolute, `${JSON.stringify(report, null, 2)}\n`);
+  const changedSource = join(sandbox, "packages/auth/src/during-survey.ts");
+  writeFileSync(changedSource, "export const changedDuringSurvey = true;\n");
+  const changedRepository = run("tool", "run", "survey-report-validate", "--role", "capability", "--file", reportPath, "--root", sandbox, "--json");
+  assert.equal(changedRepository.status, 1);
+  assert.ok(JSON.parse(changedRepository.stdout).result.errors.some((item) => item.code === "repository-changed"));
+  rmSync(changedSource);
 });
 
 test("init records ignored boundaries without reading their contents", () => {

@@ -28,7 +28,7 @@ English. Project identifiers and declared technical nouns are permitted.
 
 ## Status
 
-The current 0.2 release provides:
+The current release provides:
 
 - Repository initialization and inventory scan
 - Charter creation and validation
@@ -37,6 +37,8 @@ The current 0.2 release provides:
 - Pointer and fingerprint Bearing checks
 - Command help and stable aliases
 - A registered read-only Node.js Toolbox for recurring repository analysis
+- Role-specific validation of isolated Expedition survey reports before
+  synthesis
 - A project-local Tool Gap Log for recurring operations missing from the Toolbox
 - Document review: Mauro re-checks a document whose evidence changed
 - Atomic writer locking with owner details and safe stale-lock recovery
@@ -272,6 +274,8 @@ mauro tool run repository-files --path "apps/**" --role source --json
 mauro tool run dependency-graph --unit payments --json
 mauro tool run documentation-index --status suspect --json
 mauro tool run duplicate-analysis --path "packages/**" --json
+mauro tool run survey-report-validate --role capability \
+  --file ".mauro/drafts/<id>/surveys/capability.json" --json
 ```
 
 Each tool declares its runtime, permissions, input schema, and output schema.
@@ -279,6 +283,12 @@ The first Toolbox release is read-only and does not use the network. A tool can
 start only the subprocesses that it declares; the documentation index declares
 Git because its Bearing check inspects ignore rules. Results are bounded to
 protect the Claude context window.
+
+`survey-report-validate` checks a mapper report against its role contract, the
+deterministic Map and configuration baseline, supported path syntax, size
+limit, and required inventory coverage. Each top-level mapper gets an isolated
+report file and cannot delegate. Synthesis stops unless the structure,
+capability, documentation, and duplication reports all pass.
 
 When an agent must use a system utility, temporary script, or manual fallback,
 the caller can record the missing reusable operation:
@@ -342,6 +352,7 @@ docs/mauro/map.md           human-readable observed structure
 .mauro/changed-paths.json   pending repository evidence changes
 .mauro/reconciliation.json  last reconciled tree, HEAD, and canonical commit
 .mauro/tool-gaps.json       recurring missing Toolbox operations
+.mauro/drafts/              temporary, unpublishable Expedition reports
 .mauro/voyages/             durable Voyage records and path leases
 docs/mauro/chronicles/reviews/  document review verdicts and evidence
 .claude/rules/mauro/        generated path-scoped knowledge

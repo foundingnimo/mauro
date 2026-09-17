@@ -23,10 +23,17 @@ mauro tool run repository-files --path "apps/**" --role source --json
 mauro tool run dependency-graph --unit payments --json
 mauro tool run documentation-index --status suspect --json
 mauro tool run duplicate-analysis --path "packages/**" --json
+mauro tool run survey-report-validate --role capability --file ".mauro/drafts/<id>/surveys/capability.json" --json
 ```
 
 Tool execution requires an initialized repository. Results are bounded. Check
 `truncated` and increase `--limit` when necessary. The maximum limit is 1000.
+
+`survey-report-validate` is an Expedition gate. It checks one isolated report
+against its role contract, deterministic Map baseline, scan-configuration
+digest, supported path syntax, size limit, and required inventory coverage. An
+invalid report exits with failure. Synthesis must not start until the four role
+reports are valid. See [the survey report contract](survey-reports.md).
 
 ## Selection rules
 
