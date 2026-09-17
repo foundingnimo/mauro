@@ -19,6 +19,12 @@ function capabilityUnits(state, capabilities) {
   return ids;
 }
 
+function instructionApplies(contract, paths) {
+  if (contract.scope === ".") return true;
+  const scoped = `${contract.scope}/**`;
+  return paths.some((path) => overlaps(path, scoped));
+}
+
 export function buildBrief(root, objective) {
   const report = checkRepository(root);
   const state = report.state;
@@ -39,6 +45,7 @@ export function buildBrief(root, objective) {
     .filter(([, record]) => paths.some((path) => (record.paths || []).some((recordPath) => overlaps(path, recordPath))))
     .map(([id, record]) => ({ id, source: record.source, status: record.status, paths: record.paths || [] }));
   const documents = Object.entries(state.manifest.documents || {})
+    .filter(([, document]) => document.kind !== "instruction-contract")
     .filter(([, document]) => paths.some((path) => (document.watches || []).some((watch) => overlaps(path, watch))))
     .map(([id, document]) => ({
       id,
@@ -46,6 +53,19 @@ export function buildBrief(root, objective) {
       status: document.status,
       criticality: document.criticality,
       findings: report.findings.filter((finding) => finding.path === document.path).map((finding) => finding.code)
+    }));
+  const instructionContracts = (state.map.instruction_contracts || [])
+    .filter((contract) => instructionApplies(contract, paths))
+    .map((contract) => ({
+      id: contract.id,
+      path: contract.path,
+      kind: contract.kind,
+      providers: contract.providers,
+      scope: contract.scope,
+      parent: contract.parent,
+      ownership: contract.ownership,
+      over_limit: contract.over_limit,
+      findings: report.findings.filter((finding) => finding.path === contract.path).map((finding) => finding.code)
     }));
   const activeVoyages = listVoyages(root, { openOnly: true }).filter((voyage) => voyage.status === "active");
   const conflicts = activeVoyages
@@ -96,6 +116,7 @@ export function buildBrief(root, objective) {
       ...state.manifest.navigators[id]
     })),
     knowledge,
+    instruction_contracts: instructionContracts,
     documents,
     dependencies,
     verification,
@@ -126,6 +147,9 @@ export function renderBrief(brief) {
     "",
     "Knowledge:",
     ...lines(brief.knowledge, (record) => `${record.id}: ${record.status} (${record.source})`),
+    "",
+    "Instruction contracts:",
+    ...lines(brief.instruction_contracts, (contract) => `${contract.path}: ${contract.kind}, scope ${contract.scope}${contract.findings.length ? ` [${contract.findings.join(", ")}]` : ""}`),
     "",
     "Documents:",
     ...lines(brief.documents, (document) => `${document.id}: ${document.status}${document.findings.length ? ` [${document.findings.join(", ")}]` : ""} (${document.path})`),

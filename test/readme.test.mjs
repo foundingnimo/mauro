@@ -30,7 +30,7 @@ test("README lists every public command and frequent alias", () => {
 test("README overview includes durable coordination state", () => {
   const overview = section("# Mauro", "## Quickstart");
   assert.doesNotMatch(overview, /Mauro has four durable outputs/);
-  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal", "Map-publication", "oversized agent instruction files"]) {
+  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal", "Map-publication", "Instruction Contracts"]) {
     assert.ok(overview.includes(text), `README overview is missing: ${text}`);
   }
 });
@@ -40,7 +40,7 @@ test("README keeps the autonomous Quickstart and shared Navigator contract", () 
   for (const command of ["/mauro init", "/mauro next", "/mauro brief", "/mauro run", "/mauro run activate", "/mauro run finish", "/mauro reconcile", "/mauro check", "/mauro help"]) {
     assert.ok(quickstart.includes(command), `Quickstart is missing ${command}`);
   }
-  for (const text of ["asks which exact branch", "--canonical-ref <selected-branch>", "It does not infer the answer", "oversized `AGENTS.md` and `CLAUDE.md`"]) {
+  for (const text of ["asks which exact branch", "--canonical-ref <selected-branch>", "It does not infer the answer", "agent instruction files as human-owned Instruction Contracts"]) {
     assert.ok(quickstart.includes(text), `Quickstart is missing canonical-branch guidance: ${text}`);
   }
 

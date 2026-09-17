@@ -3,8 +3,8 @@ import { extname } from "node:path";
 import { MANIFEST_SCHEMA_VERSION, MAURO_VERSION, PATHS, SCHEMA_VERSION } from "./constants.mjs";
 import { exists, fingerprintPath, repoPath, walkFiles } from "./fs.mjs";
 import { charterMessage, charterState } from "./charter.mjs";
-import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
-import { loadState, repositoryMigrationStatus } from "./state.mjs";
+import { createGitignoredPolicy, documentFingerprintPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
+import { loadState, repositoryMigrationStatus, repositoryReconciliationStatus } from "./state.mjs";
 import { summarizeToolGaps } from "./tool-gaps.mjs";
 import { summarizeVoyages } from "./voyages.mjs";
 import { canonicalRefStatus } from "./freshness.mjs";
@@ -51,7 +51,6 @@ function validateRelativePath(root, path, findings, code) {
 // from the same answer, so the two can never disagree.
 export function documentDrift(root, state) {
   const ignoredPolicy = createGitignoredPolicy(root, state.config);
-  const options = fingerprintOptions(state.config, state.map, root, ignoredPolicy);
   const drift = {};
   for (const [id, document] of Object.entries(state.manifest.documents || {})) {
     const entry = { changed: [], unfingerprinted: [], invalid: [] };
@@ -66,7 +65,8 @@ export function documentDrift(root, state) {
         continue;
       }
       const expected = state.fingerprints.documents?.[id]?.[watched];
-      const actual = fingerprintPath(root, watched, fingerprintExcludes(state.config, state.map, watched, ignoredPolicy), options);
+      const policy = documentFingerprintPolicy(document, watched, state.config, state.map, root, ignoredPolicy);
+      const actual = fingerprintPath(root, watched, policy.excludes, policy.options);
       if (!expected) entry.unfingerprinted.push(watched);
       else if (actual !== expected) entry.changed.push(watched);
     }
@@ -95,10 +95,19 @@ export function checkRepository(root) {
     findings.push(finding("error", "state-schema", "A Mauro state file has an unsupported schema."));
   }
   const migration = repositoryMigrationStatus(root);
+  const reconciliation = repositoryReconciliationStatus(root, state.config);
   if (!migration.supported) {
     findings.push(finding("error", "migration-unsupported", `Repository context cannot be migrated automatically: ${migration.reasons.join(", ")}.`));
   } else if (migration.required) {
     findings.push(finding("warning", "migration-required", `Repository context needs migration to manifest schema ${MANIFEST_SCHEMA_VERSION}. Run \`mauro reconcile\`.`));
+  }
+  const reconciliationReasons = reconciliation.reasons.filter((reason) => reason !== "working-tree");
+  if (reconciliationReasons.length) {
+    findings.push(finding(
+      "warning",
+      "reconciliation-required",
+      `Repository context needs reconciliation because ${reconciliationReasons.join(", ")} changed. Run \`mauro reconcile\`.`
+    ));
   }
   if (canonical.relationship === "not-git") {
     findings.push(finding("error", "canonical-branch-unavailable", "Mauro requires a Git repository and one explicit canonical branch."));
@@ -116,12 +125,26 @@ export function checkRepository(root) {
     const counts = canonical.behind === null ? "" : ` (${canonical.behind} behind, ${canonical.ahead} ahead)`;
     findings.push(finding("warning", `canonical-${canonical.relationship}`, `Checkout is ${canonical.relationship} relative to canonical ${canonical.ref}${counts}. Update the branch from canonical history, or use --allow-behind deliberately.`));
   }
+  for (const contract of state.map.instruction_contracts || []) {
+    const document = state.manifest.documents?.[contract.id];
+    if (!document || document.kind !== "instruction-contract" || document.path !== contract.path) {
+      findings.push(finding("error", "instruction-contract-unregistered", `${contract.path} is not registered as a binding Instruction Contract. Run \`mauro reconcile\`.`, contract.path));
+    }
+  }
   for (const warning of state.map.instruction_file_warnings || []) {
     findings.push(finding(
       "warning",
       "instruction-file-oversized",
       `${warning.path} is ${warning.size_bytes} bytes, above the ${warning.warning_threshold_bytes}-byte host-context warning threshold. Split global rules from scoped guidance.`,
       warning.path
+    ));
+  }
+  for (const group of state.map.instruction_duplicate_groups || []) {
+    findings.push(finding(
+      "information",
+      "instruction-contract-duplicate",
+      `Exact instruction text appears in ${group.paths.length} scopes: ${group.paths.join(", ")}. Review whether scoped guidance can inherit instead.`,
+      group.paths[0]
     ));
   }
   for (const capability of state.map.capabilities || []) {
@@ -211,17 +234,19 @@ export function checkRepository(root) {
   const warnings = findings.filter((item) => item.level === "warning").length;
   const information = findings.filter((item) => item.level === "information").length;
   const publication = publicationState(state, errors, warnings);
-  return { ok: errors === 0, current: errors === 0 && warnings === 0, errors, warnings, information, charter, migration, canonical, publication, findings, state };
+  return { ok: errors === 0, current: errors === 0 && warnings === 0, errors, warnings, information, charter, migration, reconciliation, canonical, publication, findings, state };
 }
 
 export function statusSummary(root) {
   const report = checkRepository(root);
   const { state } = report;
   const knowledge = Object.values(state.manifest.knowledge || {});
+  const instructions = state.map.instruction_contracts || [];
   return {
     initialized: true,
     mode: state.config.mode,
     publication: report.publication,
+    reconciliation: report.reconciliation,
     git: report.canonical,
     baseline: state.map.baseline,
     files: state.map.files.length,
@@ -231,6 +256,12 @@ export function statusSummary(root) {
     approved_capabilities: state.map.capabilities.filter((item) => item.approved === true).length,
     preliminary_capabilities: state.map.capabilities.filter((item) => item.approved !== true).length,
     navigators: Object.keys(state.manifest.navigators || {}).length,
+    instructions: {
+      total: instructions.length,
+      human_owned: instructions.filter((item) => item.ownership === "human").length,
+      over_limit: instructions.filter((item) => item.over_limit).length,
+      providers: [...new Set(instructions.flatMap((item) => item.providers || []))].sort()
+    },
     knowledge: {
       total: knowledge.length,
       active: knowledge.filter((item) => item.status === "active").length,

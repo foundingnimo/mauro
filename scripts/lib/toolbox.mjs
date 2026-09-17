@@ -138,6 +138,11 @@ const TOOLS = new Map([
           declared_status: document.status,
           effective_status: effectiveStatus,
           criticality: document.criticality,
+          kind: document.kind || "document",
+          ownership: document.ownership || null,
+          scope: document.scope || null,
+          providers: document.providers || [],
+          parent: document.parent || null,
           watches: document.watches || [],
           findings: findings.map(({ level, code, message }) => ({ level, code, message }))
         };

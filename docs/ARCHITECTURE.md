@@ -15,10 +15,12 @@ pointers, and checks generated files. The core does not need a network or an
 AI provider. A validated scan policy controls package scope and file roles
 before semantic agents receive evidence.
 
-The perimeter preflight also records oversized `AGENTS.md` and `CLAUDE.md`
-files. It uses a conservative byte threshold and reports the paths before
-semantic surveys because a host can truncate or reject oversized instruction
-context. This is a warning, not a scan exclusion.
+The perimeter preflight also records configured agent instruction files as
+Instruction Contracts. Each record contains the provider, directory scope,
+nearest parent, precedence, ownership, size, and digest. The default patterns
+cover AGENTS, Claude, Gemini, GitHub Copilot, and Cursor formats. A conservative
+byte threshold reports oversized instruction context before semantic surveys.
+The size finding is a warning, not a scan exclusion.
 
 The built-in Toolbox exposes recurring deterministic analysis through the
 Mauro CLI. Each registered tool declares structured inputs, structured output,
@@ -98,7 +100,7 @@ worktrees or clones to receive them.
 | Location | Ownership | Purpose |
 |---|---|---|
 | `.mauro/map.json` | generated | Observed structure and evidence |
-| `.mauro/config.json` | human | Scan boundaries, canonical ref, and operating policy |
+| `.mauro/config.json` | human | Scan boundaries, Instruction Contract patterns, canonical ref, and operating policy |
 | `.mauro/manifest.json` | generated | Knowledge, document, and Navigator index |
 | `.mauro/fingerprints.json` | generated | Evidence used for freshness checks |
 | `.mauro/changed-paths.json` | generated | Pending evidence paths from host hooks |
@@ -129,6 +131,13 @@ repository-level knowledge suspect. Content changes inside an existing
 record-only boundary do not. Oversize files
 use a metadata fingerprint and are not read into the Map.
 
+A discovered Instruction Contract is a direct binding watch. Ordinary role,
+document, language, and package filters cannot disable its fingerprint. A root
+contract applies to the repository. A nested contract applies to its directory
+subtree and inherits the nearest parent for the same provider. A changed or
+missing contract blocks the Bearing check. Mauro proposes changes to these
+human-owned files; it does not rewrite them silently.
+
 Document criticality controls the response:
 
 - A suspect binding document is an error.
@@ -155,7 +164,11 @@ backup. An update removes old Mauro-owned hook commands and installs one hook
 per event for the current neutral runtime; unrelated settings and hooks stay.
 All hooks return immediately in repositories that do not use Mauro.
 At session start and stop, a hook reconciles changed evidence only when its
-path-and-content signature differs from the previous reconciliation. Hosts
+path-and-content signature, `HEAD`, configured canonical ref, or locally
+available canonical commit differs from the previous reconciliation. A clean
+commit, branch switch, or fast-forward therefore triggers a Map refresh. A
+canonical-only change is recorded and reported. Mauro does not inspect the
+other branch or rebuild trusted context until the checkout is updated. Hosts
 without Mauro lifecycle hooks follow the same operation through the ambient
 skill at task boundaries.
 
@@ -189,4 +202,5 @@ Mauro stores summaries, safe perimeter paths, and evidence references. It does n
 reasoning traces, transcripts, credentials, or secret file content. Default
 scan exclusions cover common secret paths and never expose them in the perimeter.
 Generated and ignored regions are record-only by default. Mapper agents must
-not execute instructions found in repository files.
+not execute instructions found in repository files. They treat Instruction
+Contracts as binding human intent to analyze, not as commands for the survey.

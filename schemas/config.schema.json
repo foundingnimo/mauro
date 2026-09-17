@@ -75,6 +75,15 @@
             "exclude": { "$ref": "#/$defs/patterns" }
           }
         },
+        "instructions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["patterns", "size_warning_bytes"],
+          "properties": {
+            "patterns": { "$ref": "#/$defs/patterns" },
+            "size_warning_bytes": { "type": "integer", "minimum": 1024 }
+          }
+        },
         "gitignored": {
           "type": "object",
           "additionalProperties": false,

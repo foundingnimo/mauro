@@ -5,11 +5,11 @@ import { MANIFEST_SCHEMA_VERSION, PATHS, SCHEMA_VERSION } from "./constants.mjs"
 import { copyTextIfMissing, ensureDir, exists, fingerprintPath, readJson, repoPath, sha256Buffer, watchPathspec, writeJson, writeText } from "./fs.mjs";
 import { gitChangedPaths, gitHead } from "./git.mjs";
 import { scanRepository } from "./inventory.mjs";
-import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions, validateConfig } from "./policy.mjs";
+import { createGitignoredPolicy, documentFingerprintPolicy, fingerprintExcludes, fingerprintOptions, validateConfig } from "./policy.mjs";
 import { navigatorIdentity, renderAgentSkill, renderClaudeAgent, renderClaudeRule, renderMap, renderNavigatorBrief, slug } from "./render.mjs";
 import { loadToolGapLog } from "./tool-gaps.mjs";
 import { withProjectLock } from "./lock.mjs";
-import { assertCanonicalPinned } from "./freshness.mjs";
+import { assertCanonicalPinned, canonicalRefStatus } from "./freshness.mjs";
 
 export function isInitialized(root) {
   return exists(repoPath(root, PATHS.config)) && exists(repoPath(root, PATHS.map));
@@ -29,8 +29,12 @@ export function loadState(root) {
 export function repositoryMigrationStatus(root) {
   if (!isInitialized(root)) return { required: false, supported: true, initialized: false, manifest_from: null, manifest_to: MANIFEST_SCHEMA_VERSION, reasons: [] };
   let manifest;
+  let map;
   try { manifest = readJson(repoPath(root, PATHS.manifest)); } catch {
     return { required: false, supported: false, initialized: true, manifest_from: null, manifest_to: MANIFEST_SCHEMA_VERSION, reasons: ["manifest-unreadable"] };
+  }
+  try { map = readJson(repoPath(root, PATHS.map)); } catch {
+    return { required: false, supported: false, initialized: true, manifest_from: manifest.schema_version ?? null, manifest_to: MANIFEST_SCHEMA_VERSION, reasons: ["map-unreadable"] };
   }
   const from = manifest.schema_version;
   if (!Number.isInteger(from) || from < 1 || from > MANIFEST_SCHEMA_VERSION) {
@@ -46,6 +50,7 @@ export function repositoryMigrationStatus(root) {
   const reasons = [];
   if (from < MANIFEST_SCHEMA_VERSION) reasons.push("manifest-schema");
   if (Object.values(manifest.navigators || {}).some((navigator) => !navigator.generated_skill)) reasons.push("portable-navigator-views");
+  if (!Array.isArray(map.instruction_contracts)) reasons.push("instruction-contracts");
   return {
     required: reasons.length > 0,
     supported: true,
@@ -62,6 +67,24 @@ function template(pluginRoot, name) {
 
 function makeDocument(path, criticality, watches, knowledge = []) {
   return { path, status: "current", criticality, watches, knowledge };
+}
+
+function makeInstructionDocument(contract, previous = null) {
+  return {
+    ...(previous || {}),
+    path: contract.path,
+    status: previous?.status || "current",
+    criticality: "binding",
+    watches: [contract.path],
+    knowledge: previous?.knowledge || [],
+    kind: "instruction-contract",
+    ownership: "human",
+    instruction_kind: contract.kind,
+    providers: contract.providers,
+    scope: contract.scope,
+    parent: contract.parent,
+    precedence: contract.precedence
+  };
 }
 
 function isMauroManagedPath(path) {
@@ -90,25 +113,70 @@ function changedPathSignature(root, paths) {
   return sha256Buffer(Buffer.from(JSON.stringify(evidence)));
 }
 
-function reconciliationState(root) {
-  const paths = relevantChangedPaths(gitChangedPaths(root));
+function reconciliationState(root, config, observedPaths = gitChangedPaths(root)) {
+  const paths = relevantChangedPaths(observedPaths);
+  const canonical = canonicalRefStatus(root, config);
   return {
     schema_version: SCHEMA_VERSION,
     updated_at: new Date().toISOString(),
     observed_paths: paths,
-    git_signature: changedPathSignature(root, paths)
+    git_signature: changedPathSignature(root, paths),
+    head_commit: canonical.head || null,
+    canonical_ref: canonical.ref || null,
+    canonical_commit: canonical.canonical_commit || null,
+    canonical_relationship: canonical.relationship
   };
 }
 
-function markReconciled(root, scanStarted = null) {
-  const current = reconciliationState(root);
-  const changedDuringScan = Boolean(scanStarted && scanStarted.git_signature !== current.git_signature);
+function reconciliationReasons(previous, current) {
+  if (!previous || !("head_commit" in previous) || !("canonical_ref" in previous) || !("canonical_commit" in previous)) {
+    return ["reconciliation-metadata"];
+  }
+  const reasons = [];
+  if (previous.git_signature !== current.git_signature) reasons.push("working-tree");
+  if (previous.head_commit !== current.head_commit) reasons.push("head-commit");
+  if (previous.canonical_ref !== current.canonical_ref) reasons.push("canonical-ref");
+  if (previous.canonical_commit !== current.canonical_commit) reasons.push("canonical-commit");
+  return reasons;
+}
+
+function readReconciliation(root) {
+  try { return readJson(repoPath(root, PATHS.reconciliation)); } catch { return null; }
+}
+
+export function repositoryReconciliationStatus(root, config, observedPaths = gitChangedPaths(root)) {
+  const previous = readReconciliation(root);
+  const current = reconciliationState(root, config, observedPaths);
+  const reasons = reconciliationReasons(previous, current);
+  return {
+    required: reasons.length > 0,
+    reasons,
+    previous: previous ? {
+      head_commit: previous.head_commit || null,
+      canonical_ref: previous.canonical_ref || null,
+      canonical_commit: previous.canonical_commit || null
+    } : null,
+    current: {
+      head_commit: current.head_commit,
+      canonical_ref: current.canonical_ref,
+      canonical_commit: current.canonical_commit
+    }
+  };
+}
+
+function markReconciled(root, config, scanStarted = null) {
+  const current = reconciliationState(root, config);
+  const pendingReasons = scanStarted ? reconciliationReasons(scanStarted, current) : [];
+  const changedDuringScan = pendingReasons.length > 0;
   writeJson(repoPath(root, PATHS.changes), {
     schema_version: SCHEMA_VERSION,
     paths: changedDuringScan ? current.observed_paths : []
   });
-  writeJson(repoPath(root, PATHS.reconciliation), current);
-  return { complete: !changedDuringScan, pending_paths: changedDuringScan ? current.observed_paths : [] };
+  // Keep the pre-scan observation when Git changes during the scan. The next
+  // reconciliation must see a clean-commit or canonical-ref change even when
+  // there are no dirty paths to put in the queue.
+  writeJson(repoPath(root, PATHS.reconciliation), changedDuringScan ? scanStarted : current);
+  return { complete: !changedDuringScan, pending_paths: changedDuringScan ? current.observed_paths : [], pending_reasons: pendingReasons };
 }
 
 export const VERIFICATION_FIELDS = Object.freeze(["verified_commit", "verified_at", "verified_dirty", "verified_evidence"]);
@@ -161,7 +229,14 @@ function removeGeneratedSkill(root, path) {
 
 function rebuildViews(root, map, previousManifest = null) {
   const preservedDocuments = Object.fromEntries(
-    Object.entries(previousManifest?.documents || {}).filter(([id]) => id !== "doc-map" && id !== "doc-charter" && !id.startsWith("navigator-"))
+    Object.entries(previousManifest?.documents || {}).filter(([id, document]) => {
+      if (id === "doc-map" || id === "doc-charter" || id.startsWith("navigator-")) return false;
+      if (document.kind !== "instruction-contract") return true;
+      // Keep a deleted contract visible until a person resolves it. If the
+      // file still exists but the configured patterns no longer select it,
+      // the explicit policy change retires the generated registration.
+      try { return !exists(repoPath(root, document.path)); } catch { return true; }
+    })
   );
   const manifest = {
     schema_version: MANIFEST_SCHEMA_VERSION,
@@ -172,6 +247,9 @@ function rebuildViews(root, map, previousManifest = null) {
   const watchRoots = [...new Set([".", ...map.units.flatMap((unit) => unit.scope === "stub" ? (unit.manifests || [unit.manifest]).filter(Boolean) : [unit.root])])];
   manifest.documents["doc-map"] = makeDocument(PATHS.mapDocument, "informational", watchRoots);
   manifest.documents["doc-charter"] = previousManifest?.documents?.["doc-charter"] || makeDocument(PATHS.charter, "binding", []);
+  for (const contract of map.instruction_contracts || []) {
+    manifest.documents[contract.id] = makeInstructionDocument(contract, previousManifest?.documents?.[contract.id]);
+  }
 
   writeText(repoPath(root, PATHS.mapDocument), renderMap(map));
   for (const capability of map.capabilities) {
@@ -228,7 +306,8 @@ export function buildFingerprints(root, manifest, config, map) {
   for (const [id, document] of Object.entries(manifest.documents)) {
     fingerprints.documents[id] = {};
     for (const path of document.watches || []) {
-      fingerprints.documents[id][path] = fingerprintPath(root, path, fingerprintExcludes(config, map, path, ignoredPolicy), options);
+      const policy = documentFingerprintPolicy(document, path, config, map, root, ignoredPolicy);
+      fingerprints.documents[id][path] = fingerprintPath(root, path, policy.excludes, policy.options);
     }
   }
   return fingerprints;
@@ -238,7 +317,6 @@ function initializeUnlocked(root, pluginRoot, { canonicalRef = null } = {}) {
   if (isInitialized(root)) {
     throw new Error("Mauro is already initialized. Use `mauro map update`.");
   }
-  const scanStarted = reconciliationState(root);
   const context = verificationContext(root);
   const configPath = repoPath(root, PATHS.config);
   const configExists = exists(configPath);
@@ -247,6 +325,7 @@ function initializeUnlocked(root, pluginRoot, { canonicalRef = null } = {}) {
     ? sourceConfig
     : { ...sourceConfig, git: { ...sourceConfig.git, canonical_ref: canonicalRef } });
   const canonical = assertCanonicalPinned(root, { config, action: "initialization" });
+  const scanStarted = reconciliationState(root, config);
   const map = scanRepository(root, config);
   for (const path of [PATHS.state, PATHS.voyages, PATHS.docs, PATHS.knowledge, PATHS.navigators, PATHS.chronicles, PATHS.artifacts, PATHS.rules, PATHS.agents, PATHS.agentSkills]) {
     ensureDir(repoPath(root, path));
@@ -260,7 +339,7 @@ function initializeUnlocked(root, pluginRoot, { canonicalRef = null } = {}) {
   writeJson(repoPath(root, PATHS.manifest), manifest);
   const fingerprints = buildFingerprints(root, manifest, config, map);
   writeJson(repoPath(root, PATHS.fingerprints), fingerprints);
-  const reconciliation = markReconciled(root, scanStarted);
+  const reconciliation = markReconciled(root, config, scanStarted);
   return { map, manifest, fingerprints, reconciliation, canonical };
 }
 
@@ -311,12 +390,12 @@ export function mergeCapabilities(previousCapabilities, scannedCapabilities, uni
 }
 
 function updateMapUnlocked(root) {
-  const scanStarted = reconciliationState(root);
   const migration = repositoryMigrationStatus(root);
   if (!migration.supported) {
     throw new Error(`Repository context cannot be migrated automatically: ${migration.reasons.join(", ")}.`);
   }
   const current = loadState(root);
+  const scanStarted = reconciliationState(root, current.config);
   const context = verificationContext(root);
   const scanned = scanRepository(root, current.config);
   const oldUnits = new Set(current.map.units.map((unit) => unit.id));
@@ -361,7 +440,7 @@ function updateMapUnlocked(root) {
     ]))
   };
   writeJson(repoPath(root, PATHS.fingerprints), fingerprints);
-  const reconciliation = markReconciled(root, scanStarted);
+  const reconciliation = markReconciled(root, current.config, scanStarted);
   return { map, manifest, fingerprints, reconciliation };
 }
 
@@ -378,32 +457,44 @@ export function reconcile(root, { observedPaths = gitChangedPaths(root), force =
     const queuePath = repoPath(root, PATHS.changes);
     let queued = [];
     try { queued = readJson(queuePath).paths || []; } catch {}
+    const state = loadState(root);
     const observed = relevantChangedPaths(observedPaths);
-    const signature = changedPathSignature(root, observed);
-    let previous = null;
-    try { previous = readJson(repoPath(root, PATHS.reconciliation)); } catch {}
-    const newlyObserved = previous?.git_signature === signature ? [] : observed;
+    const previous = readReconciliation(root);
+    const current = reconciliationState(root, state.config, observed);
+    const triggers = reconciliationReasons(previous, current);
+    const newlyObserved = triggers.includes("working-tree") ? observed : [];
     const paths = relevantChangedPaths([...queued, ...newlyObserved]);
-    if (!force && !migration.required && paths.length === 0) {
-      if (previous?.git_signature !== signature) {
-        writeJson(repoPath(root, PATHS.reconciliation), {
-          schema_version: SCHEMA_VERSION,
-          updated_at: new Date().toISOString(),
-          observed_paths: observed,
-          git_signature: signature
-        });
-      }
-      return { updated: false, paths: [], migration, reason: "Repository evidence has not changed since the last reconciliation." };
+    const contentTriggers = triggers.filter((reason) => ["reconciliation-metadata", "working-tree", "head-commit"].includes(reason));
+    const canonicalTriggers = triggers.filter((reason) => reason === "canonical-ref" || reason === "canonical-commit");
+    if (!force && !migration.required && paths.length === 0 && contentTriggers.length === 0) {
+      if (canonicalTriggers.length) writeJson(repoPath(root, PATHS.reconciliation), current);
+      const checkoutUpdateRequired = ["behind", "diverged"].includes(current.canonical_relationship);
+      return {
+        updated: false,
+        paths: [],
+        triggers,
+        canonical_changed: canonicalTriggers.length > 0,
+        checkout_update_required: checkoutUpdateRequired,
+        migration,
+        reason: canonicalTriggers.length
+          ? checkoutUpdateRequired
+            ? "The locally available canonical branch changed. Update this checkout before Mauro rebuilds trusted repository context."
+            : "The locally available canonical branch changed, but this checkout's content did not. Mauro recorded the new canonical commit."
+          : "Repository evidence has not changed since the last reconciliation."
+      };
     }
     const result = updateMapUnlocked(root);
+    const reportedPaths = force || (paths.length === 0 && contentTriggers.length > 0) ? ["**"] : paths;
     return {
       updated: true,
-      paths: force && paths.length === 0 ? ["**"] : paths,
+      paths: reportedPaths,
+      triggers,
       files: result.map.files.length,
       units: result.map.units.length,
       capabilities: result.map.capabilities.length,
       complete: result.reconciliation.complete,
       pending_paths: result.reconciliation.pending_paths,
+      pending_reasons: result.reconciliation.pending_reasons,
       migration: { ...migration, completed: migration.required }
     };
   });

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Treat agent instruction files as first-class, human-owned Instruction
+  Contracts with configurable discovery, provider and directory scope,
+  inheritance, binding fingerprints, duplicate detection, and task-brief
+  visibility.
+- Make changed or missing Instruction Contracts block the Bearing check while
+  keeping all edits behind human approval.
+- Make reconciliation observe `HEAD`, the configured canonical ref, and its
+  locally available commit so clean commits, branch switches, and fast-forwards
+  trigger Map and Instruction Contract refreshes without fetching.
+
 ## 0.2.0 (2026-09-17)
 
 - Reframe Mauro as an ambient repository-context sidecar that coding agents

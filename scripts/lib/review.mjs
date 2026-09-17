@@ -4,7 +4,7 @@ import { PATHS } from "./constants.mjs";
 import { exists, fingerprintPath, repoPath, toPosix, watchPathspec, writeJson } from "./fs.mjs";
 import { documentDrift } from "./check.mjs";
 import { gitCommitReachable, gitDiffSince, gitHead, gitLogSince, gitUntracked } from "./git.mjs";
-import { createGitignoredPolicy, fingerprintExcludes, fingerprintOptions } from "./policy.mjs";
+import { createGitignoredPolicy, documentFingerprintPolicy } from "./policy.mjs";
 import { loadState, verificationContext, verificationStamp } from "./state.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { assertCanonicalCurrent, canonicalRefStatus } from "./freshness.mjs";
@@ -23,6 +23,11 @@ function packet(root, id, document, entry) {
   const result = {
     id,
     path: document.path,
+    kind: document.kind || "document",
+    ownership: document.ownership || null,
+    scope: document.scope || null,
+    providers: document.providers || [],
+    parent: document.parent || null,
     criticality: document.criticality,
     status: document.status,
     changed_watches: entry.changed,
@@ -105,10 +110,10 @@ function confirmDocumentUnlocked(root, id, evidence, { allowBehind = false } = {
   }
 
   const ignoredPolicy = createGitignoredPolicy(root, state.config);
-  const options = fingerprintOptions(state.config, state.map, root, ignoredPolicy);
   const refreshed = {};
   for (const path of document.watches || []) {
-    refreshed[path] = fingerprintPath(root, path, fingerprintExcludes(state.config, state.map, path, ignoredPolicy), options);
+    const policy = documentFingerprintPolicy(document, path, state.config, state.map, root, ignoredPolicy);
+    refreshed[path] = fingerprintPath(root, path, policy.excludes, policy.options);
   }
   const confirmed = { ...document, ...verificationStamp(document.watches || [], verificationContext(root)), verified_evidence: normalized };
   if (confirmed.status === "suspect" || confirmed.status === "stale") confirmed.status = "current";

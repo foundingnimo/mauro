@@ -27,7 +27,7 @@ Use exact command names and aliases. Do not resolve partial names.
 | `doctor` | Validate installation, hooks, schemas, and scanners. |
 | `init` | Ask for and pin the canonical branch, then run the first Expedition. |
 | `navigator` | List, show, regenerate, or request specialist review. |
-| `reconcile` | Refresh derived context when repository evidence changed. |
+| `reconcile` | Refresh derived context when checkout evidence or `HEAD` changed; record local canonical movement. |
 | `refit` | Show or propose repository restructuring. |
 | `tool` | List, describe, or run a trusted read-only Toolbox operation. |
 | `who` | Find the responsible Navigator for a path or capability. |

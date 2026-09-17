@@ -59,6 +59,17 @@
       "include": [],
       "exclude": []
     },
+    "instructions": {
+      "patterns": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "GEMINI.md",
+        ".cursorrules",
+        ".github/copilot-instructions.md",
+        ".cursor/rules/**"
+      ],
+      "size_warning_bytes": 150000
+    },
     "gitignored": {
       "default": "record",
       "include": [],

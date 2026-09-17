@@ -73,10 +73,12 @@ mauro reconcile [--force] [--json]
 mauro brief "<objective>" [--json]
 ```
 
-`reconcile` compares queued changes and the current Git path-and-content
-signature with the previous reconciliation. It regenerates derived context
-only when evidence changed. `--force` performs the refresh even without a
-detected change. `brief` is read-only. It returns the likely paths,
+`reconcile` compares queued changes, the current Git path-and-content
+signature, `HEAD`, the configured canonical ref, and its local commit with the
+previous reconciliation. It regenerates derived context when checkout evidence
+changed. A canonical-only change is reported without inspecting that branch.
+`--force` performs the refresh even without a detected change. `brief` is
+read-only. It returns the likely paths,
 responsible and reviewing Navigators, Charter, applicable knowledge,
 dependencies, document state, active Voyage conflicts, and verification.
 Neither command edits product code or starts a Voyage.
@@ -104,8 +106,11 @@ mauro init --canonical-ref <selected-branch>
 Mauro does not infer this choice from the current branch, `origin/HEAD`,
 `main`, or `master`.
 
-The deterministic init result lists oversized `AGENTS.md` and `CLAUDE.md`
-files before mapper agents run. This warning does not block initialization.
+The deterministic init result lists discovered Instruction Contracts and any
+contract above the configured size warning before mapper agents run. This
+warning does not block initialization. `status` and `doctor` report contract
+counts. `brief` includes the global and scoped contracts that apply to its
+predicted paths.
 `status`, `check`, and `doctor` report Map publication separately from Bearing
 health. An approved Map with unresolved errors or warnings is
 `published_with_findings`; its Bearing can still be blocked.

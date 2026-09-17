@@ -186,6 +186,24 @@ export function fingerprintPath(root, rel, excludes = [], options = {}) {
   const absolute = repoPath(root, rel);
   if (!existsSync(absolute)) return "missing";
   const stat = lstatSync(absolute);
+  if (stat.isSymbolicLink() && options.followFileSymlinks) {
+    let target;
+    try { target = realpathSync(absolute); } catch { return "missing"; }
+    const targetRel = relative(root, target);
+    if (targetRel === ".." || targetRel.startsWith(`..${sep}`)) return "unsupported";
+    const normalizedTarget = toPosix(targetRel);
+    if (isExcluded(normalizedTarget, excludes)) return "excluded";
+    const targetStat = statSync(target);
+    if (!targetStat.isFile()) return "unsupported";
+    if (options.acceptFile && !options.acceptFile(rel, absolute)) return "excluded";
+    if (options.maxFileSize && targetStat.size > options.maxFileSize) {
+      return sha256Buffer(Buffer.from(`symlink-oversize\0${normalizedTarget}\0${targetStat.size}\0${targetStat.mtimeMs}`));
+    }
+    const hash = createHash("sha256");
+    hash.update(`symlink\0${normalizedTarget}\0`);
+    hash.update(readFileSync(target));
+    return `sha256:${hash.digest("hex")}`;
+  }
   if (stat.isFile()) {
     if (options.acceptFile && !options.acceptFile(rel, absolute)) return "excluded";
     if (options.maxFileSize && stat.size > options.maxFileSize) {

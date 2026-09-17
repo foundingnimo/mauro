@@ -61,6 +61,24 @@ Tests, fixtures, and generated files have one of these modes:
 An evidence file cannot define a capability. It cannot create a duplication or
 Refit finding. A package override takes precedence over the global role mode.
 
+## Instruction Contracts
+
+`scan.instructions.patterns` identifies human-owned files that control agent
+behaviour. The default patterns cover `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
+`.cursorrules`, `.github/copilot-instructions.md`, and `.cursor/rules/**`.
+Patterns replace the defaults. `size_warning_bytes` sets the conservative host
+context warning threshold.
+
+Mauro records each discovered file as a binding Instruction Contract. A file
+at the repository root has global scope. A nested file has directory scope and
+inherits from the nearest parent contract for the same provider. The nearest
+scope has precedence. Ordinary role, document, language, and package filters
+do not disable the direct fingerprint of a discovered contract.
+
+The files remain human-owned. Mauro can report duplication, contradiction,
+shadowing, excessive size, and stale factual claims. It must show a proposed
+change and get approval before it edits an Instruction Contract.
+
 Do not classify `vendor/` or `build/` as generated from the directory name
 alone. Mauro scans those names by default because they can hold product code,
 documentation, or hand-written tools. A repository can add an exact generated

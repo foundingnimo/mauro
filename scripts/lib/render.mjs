@@ -73,6 +73,7 @@ export function renderMap(map) {
     `- Boundary stubs: ${map.scan_summary?.stub_units || 0}`,
     `- Perimeter regions recorded without content inspection: ${map.scan_summary?.perimeter_regions || 0}`,
     `- Ignored files explicitly scanned: ${map.scan_summary?.gitignored_scanned_files || 0}`,
+    `- Instruction contracts: ${map.scan_summary?.instruction_contracts || 0}`,
     `- Oversized instruction files: ${map.scan_summary?.instruction_file_warnings || 0}`,
     `- Capabilities: ${map.capabilities.length}`,
     "",
@@ -94,6 +95,20 @@ export function renderMap(map) {
   if (map.scan_summary?.hidden_ignored_regions) {
     lines.push(`Safety policy withheld ${map.scan_summary.hidden_ignored_regions} ignored region path(s) from the Map.`, "");
   }
+  const instructionContracts = map.instruction_contracts || [];
+  lines.push(
+    "## Instruction contracts",
+    "",
+    "These human-owned files control agent behaviour. Mauro monitors them as binding contracts. Mauro can propose a change, but it must not rewrite one without human approval.",
+    ""
+  );
+  if (!instructionContracts.length) lines.push("Mauro found no configured instruction contracts.", "");
+  for (const contract of instructionContracts) {
+    const parent = contract.parent ? `; inherits from \`${safeText(contract.parent)}\`` : "";
+    const size = contract.over_limit ? `; ${contract.size_bytes} bytes, over warning threshold` : `; ${contract.size_bytes} bytes`;
+    lines.push(`- \`${safeText(contract.path)}\` — ${safeText(contract.kind)}; scope \`${safeText(contract.scope)}\`; ${contract.providers.map(safeText).join(", ")}${parent}${size}.`);
+  }
+  if (instructionContracts.length) lines.push("");
   const instructionWarnings = map.instruction_file_warnings || [];
   if (instructionWarnings.length) {
     lines.push(

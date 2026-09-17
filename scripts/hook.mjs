@@ -51,7 +51,7 @@ export function runHook(event, cwd = process.cwd()) {
     const refreshed = reconcile(root, { observedPaths: gitChangedPaths(root) });
     const report = checkRepository(root);
     const label = report.current ? "current" : "needs attention";
-    const canonical = report.findings.find((item) => item.code.startsWith("canonical-") && item.level === "error");
+    const canonical = report.findings.find((item) => item.code.startsWith("canonical-"));
     const canonicalNote = canonical ? ` ${canonical.message}` : "";
     const charter = report.charter.state === "complete" ? "" : ` The Charter is ${report.charter.state === "partial" ? "partial" : report.charter.state}; run /mauro charter ${report.charter.state === "partial" ? "update" : "create"}.`;
     const suspect = new Set(report.findings.filter((item) => item.code === "document-suspect").map((item) => item.path)).size;
@@ -61,6 +61,9 @@ export function runHook(event, cwd = process.cwd()) {
     const activeVoyages = summarizeVoyages(root).active;
     const voyages = activeVoyages ? ` ${activeVoyages} active Voyage${activeVoyages === 1 ? "" : "s"}; run /mauro run status before overlapping work.` : "";
     const refresh = refreshed.updated ? ` Repository context refreshed from ${refreshed.paths.length} changed path${refreshed.paths.length === 1 ? "" : "s"}.` : "";
-    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${canonicalNote}${refresh}${charter}${review}${navigators}${voyages} Run /mauro check for details.\n`);
+    const canonicalRefresh = refreshed.canonical_changed && refreshed.checkout_update_required
+      ? " The local canonical branch changed. Update this checkout before Mauro rebuilds trusted context."
+      : "";
+    process.stdout.write(`Mauro Bearing: ${label}. ${report.errors} error(s), ${report.warnings} warning(s).${canonicalNote}${refresh}${canonicalRefresh}${charter}${review}${navigators}${voyages} Run /mauro check for details.\n`);
   }
 }

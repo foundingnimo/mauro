@@ -17,14 +17,18 @@ normal repository request into Mauro commands.
    Initialization creates context files; it must not modify product code.
    If Mauro is already initialized but reports `canonical-branch-unpinned`,
    ask the same question and update `.mauro/config.json` after approval.
-   Before semantic surveys, report any `instruction_file_warnings` from init.
-   Explain that the host can truncate or reject the named instruction files.
-   Do not block initialization and do not rewrite those human-owned files.
-4. Run `mauro reconcile --json`. This refreshes derived context only when
-   repository evidence changed.
+   Before semantic surveys, report the `instruction_contracts` count and any
+   `instruction_file_warnings` from init. Explain that the host can truncate or
+   reject an oversized instruction file. Do not block initialization and do
+   not rewrite those human-owned files.
+4. Run `mauro reconcile --json`. This refreshes derived context when dirty
+   evidence or `HEAD` changed. If only the locally available canonical branch
+   changed and the checkout is behind, report it and ask the user to update the
+   checkout. Do not fetch or inspect the other branch.
 5. Run `mauro brief "<objective>" --json`.
 6. Read the returned Navigator sources or use the matching generated
-   repository skills. Read the Charter and applicable active knowledge.
+   repository skills. Read the Charter, applicable Instruction Contracts, and
+   active knowledge.
 
 Do not show routine command output unless it changes the answer, finds stale
 context, or needs a human decision.

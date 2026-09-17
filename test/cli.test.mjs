@@ -164,6 +164,100 @@ test("init warns about oversized agent instruction files before semantic surveys
   assert.ok(JSON.parse(check.stdout).findings.some((finding) => finding.code === "instruction-file-oversized" && finding.path === "AGENTS.md"));
 });
 
+test("instruction contracts are scoped, inherited, monitored, and included in task briefs", () => {
+  mkdirSync(join(sandbox, ".github"), { recursive: true });
+  mkdirSync(join(sandbox, ".cursor/rules"), { recursive: true });
+  writeFileSync(join(sandbox, "AGENTS.md"), "Use the repository rules.\n");
+  writeFileSync(join(sandbox, "apps/web/AGENTS.md"), "Use the repository rules.\n");
+  writeFileSync(join(sandbox, "CLAUDE.md"), "Claude repository guidance.\n");
+  writeFileSync(join(sandbox, "GEMINI.md"), "Gemini repository guidance.\n");
+  writeFileSync(join(sandbox, ".cursorrules"), "Cursor repository guidance.\n");
+  writeFileSync(join(sandbox, ".cursor/rules/frontend.mdc"), "Frontend cursor guidance.\n");
+  writeFileSync(join(sandbox, ".github/copilot-instructions.md"), "Copilot repository guidance.\n");
+
+  const initialized = run("init", "--root", sandbox, "--json");
+  assert.equal(initialized.status, 0, initialized.stderr);
+  assert.equal(JSON.parse(initialized.stdout).instruction_contracts.length, 7);
+  const map = readMap();
+  assert.equal(map.scan_summary.instruction_contracts, 7);
+  assert.deepEqual(map.instruction_contracts.map((item) => item.path), [
+    ".cursor/rules/frontend.mdc",
+    ".cursorrules",
+    ".github/copilot-instructions.md",
+    "AGENTS.md",
+    "apps/web/AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md"
+  ]);
+  const rootAgents = map.instruction_contracts.find((item) => item.path === "AGENTS.md");
+  const webAgents = map.instruction_contracts.find((item) => item.path === "apps/web/AGENTS.md");
+  assert.equal(rootAgents.scope, ".");
+  assert.equal(webAgents.scope, "apps/web");
+  assert.equal(webAgents.parent, rootAgents.id);
+  assert.deepEqual(rootAgents.providers, ["codex"]);
+  assert.equal(map.instruction_contracts.find((item) => item.path === ".cursor/rules/frontend.mdc").scope, ".");
+  assert.deepEqual(map.instruction_duplicate_groups.map((item) => item.paths), [["AGENTS.md", "apps/web/AGENTS.md"]]);
+  const status = JSON.parse(run("status", "--root", sandbox, "--json").stdout);
+  assert.equal(status.instructions.total, 7);
+  assert.deepEqual(status.instructions.providers, ["claude", "codex", "cursor", "gemini", "github-copilot"]);
+  assert.equal(JSON.parse(run("doctor", "--root", sandbox, "--json").stdout).instructions.total, 7);
+
+  const manifest = JSON.parse(readFileSync(join(sandbox, ".mauro/manifest.json"), "utf8"));
+  for (const contract of map.instruction_contracts) {
+    assert.equal(manifest.documents[contract.id].kind, "instruction-contract");
+    assert.equal(manifest.documents[contract.id].criticality, "binding");
+    assert.deepEqual(manifest.documents[contract.id].watches, [contract.path]);
+    assert.equal(manifest.documents[contract.id].ownership, "human");
+  }
+
+  const authBrief = JSON.parse(run("brief", "change auth token handling", "--root", sandbox, "--json").stdout);
+  assert.ok(authBrief.instruction_contracts.some((item) => item.path === "AGENTS.md"));
+  assert.equal(authBrief.instruction_contracts.some((item) => item.path === "apps/web/AGENTS.md"), false);
+  const webBrief = JSON.parse(run("brief", "change web application", "--root", sandbox, "--json").stdout);
+  assert.ok(webBrief.instruction_contracts.some((item) => item.path === "apps/web/AGENTS.md"));
+
+  const clean = JSON.parse(run("check", "--root", sandbox, "--json").stdout);
+  assert.ok(clean.findings.some((item) => item.code === "instruction-contract-duplicate"));
+  assert.equal(clean.errors, 0);
+  writeFileSync(join(sandbox, "apps/web/AGENTS.md"), "Changed web guidance.\n");
+  const changed = run("check", "--root", sandbox, "--json");
+  assert.equal(changed.status, 1);
+  assert.ok(JSON.parse(changed.stdout).findings.some((item) => item.code === "document-suspect" && item.path === "apps/web/AGENTS.md" && item.level === "error"));
+  const review = JSON.parse(run("docs", "review", "--root", sandbox, "--json").stdout);
+  const instructionPacket = review.documents.find((item) => item.path === "apps/web/AGENTS.md");
+  assert.equal(instructionPacket.kind, "instruction-contract");
+  assert.equal(instructionPacket.ownership, "human");
+  assert.equal(instructionPacket.scope, "apps/web");
+  assert.equal(instructionPacket.parent, rootAgents.id);
+
+  rmSync(join(sandbox, "apps/web/AGENTS.md"));
+  assert.equal(run("reconcile", "--force", "--root", sandbox).status, 0);
+  const missing = run("check", "--root", sandbox, "--json");
+  assert.equal(missing.status, 1);
+  assert.ok(JSON.parse(missing.stdout).findings.some((item) => item.code === "document-missing" && item.path === "apps/web/AGENTS.md" && item.level === "error"));
+});
+
+test("instruction contract patterns are configurable and legacy configs use defaults", () => {
+  mkdirSync(join(sandbox, ".mauro"));
+  cpSync(join(packageRoot, "templates/config.json"), join(sandbox, ".mauro/config.json"));
+  editConfig((config) => { delete config.scan.instructions; });
+  writeFileSync(join(sandbox, "AGENTS.md"), "Default contract.\n");
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  assert.deepEqual(readMap().instruction_contracts.map((item) => item.path), ["AGENTS.md"]);
+
+  writeFileSync(join(sandbox, "TEAM_RULES.md"), "Custom contract.\n");
+  editConfig((config) => {
+    config.scan.instructions = { patterns: ["TEAM_RULES.md"], size_warning_bytes: 2048 };
+  });
+  assert.equal(run("map", "update", "--root", sandbox).status, 0);
+  const contracts = readMap().instruction_contracts;
+  assert.deepEqual(contracts.map((item) => item.path), ["TEAM_RULES.md"]);
+  assert.equal(contracts[0].kind, "custom");
+  assert.equal(contracts[0].warning_threshold_bytes, 2048);
+  const manifest = JSON.parse(readFileSync(join(sandbox, ".mauro/manifest.json"), "utf8"));
+  assert.equal(Object.values(manifest.documents).some((item) => item.kind === "instruction-contract" && item.path === "AGENTS.md"), false);
+});
+
 test("status separates Map publication from Bearing health", () => {
   assert.equal(run("init", "--root", sandbox).status, 0);
   const draft = JSON.parse(run("status", "--root", sandbox, "--json").stdout);
@@ -509,6 +603,22 @@ test("symlinks are opt-in and remain visibly marked", () => {
   assert.equal(readMap().files.find((file) => file.path.endsWith("auth-link.ts")).via_symlink, true);
 });
 
+test("an opted-in symlinked Instruction Contract monitors its in-repository target", () => {
+  mkdirSync(join(sandbox, "docs"), { recursive: true });
+  writeFileSync(join(sandbox, "docs/agent-rules.md"), "Initial agent rules.\n");
+  symlinkSync("docs/agent-rules.md", join(sandbox, "AGENTS.md"));
+  mkdirSync(join(sandbox, ".mauro"));
+  cpSync(join(packageRoot, "templates/config.json"), join(sandbox, ".mauro/config.json"));
+  editConfig((config) => { config.scan.follow_symlinks = true; });
+
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  assert.ok(readMap().instruction_contracts.some((item) => item.path === "AGENTS.md"));
+  writeFileSync(join(sandbox, "docs/agent-rules.md"), "Changed agent rules.\n");
+  const changed = run("check", "--root", sandbox, "--json");
+  assert.equal(changed.status, 1);
+  assert.ok(JSON.parse(changed.stdout).findings.some((item) => item.code === "document-suspect" && item.path === "AGENTS.md"));
+});
+
 test("a Bearing check detects changed evidence without changing state", () => {
   assert.equal(run("init", "--root", sandbox).status, 0);
   const clean = run("c", "--root", sandbox);
@@ -766,6 +876,52 @@ test("reconcile refreshes changed evidence once and clears the queue", () => {
   assert.notEqual(afterSessionStart, after);
 });
 
+test("reconcile refreshes a clean working tree when HEAD changes", () => {
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  const target = join(sandbox, "packages/auth/src/token.ts");
+  const before = readMap().files.find((file) => file.path === "packages/auth/src/token.ts").digest;
+  writeFileSync(target, "export const token = 'committed change';\n");
+  assert.equal(git("add", "packages/auth/src/token.ts").status, 0);
+  assert.equal(git("-c", "user.name=Mauro Test", "-c", "user.email=mauro@test.local", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "change token").status, 0);
+  assert.equal(git("status", "--porcelain", "--untracked-files=no").stdout, "");
+
+  const beforeReconcile = JSON.parse(run("check", "--root", sandbox, "--json").stdout);
+  assert.ok(beforeReconcile.findings.some((item) => item.code === "reconciliation-required" && item.message.includes("head-commit")));
+  const refreshed = JSON.parse(run("reconcile", "--root", sandbox, "--json").stdout);
+  assert.equal(refreshed.updated, true);
+  assert.ok(refreshed.triggers.includes("head-commit"));
+  assert.deepEqual(refreshed.paths, ["**"]);
+  assert.notEqual(readMap().files.find((file) => file.path === "packages/auth/src/token.ts").digest, before);
+  assert.equal(JSON.parse(run("reconcile", "--root", sandbox, "--json").stdout).updated, false);
+});
+
+test("the monitor records canonical movement and discovers new instructions after a clean fast-forward", () => {
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  const workingBranch = git("branch", "--show-current").stdout.trim();
+  assert.equal(git("switch", "--quiet", "canonical").status, 0);
+  writeFileSync(join(sandbox, "AGENTS.md"), "New canonical instructions.\n");
+  assert.equal(git("add", "AGENTS.md").status, 0);
+  assert.equal(git("-c", "user.name=Mauro Test", "-c", "user.email=mauro@test.local", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "add instructions").status, 0);
+  assert.equal(git("switch", "--quiet", workingBranch).status, 0);
+
+  const canonicalOnly = JSON.parse(run("reconcile", "--root", sandbox, "--json").stdout);
+  assert.equal(canonicalOnly.updated, false);
+  assert.equal(canonicalOnly.canonical_changed, true);
+  assert.equal(canonicalOnly.checkout_update_required, true);
+  assert.deepEqual(canonicalOnly.triggers, ["canonical-commit"]);
+  assert.equal(readMap().instruction_contracts.some((item) => item.path === "AGENTS.md"), false);
+
+  assert.equal(git("merge", "--quiet", "--ff-only", "canonical").status, 0);
+  const pending = JSON.parse(run("check", "--root", sandbox, "--json").stdout);
+  assert.ok(pending.findings.some((item) => item.code === "reconciliation-required" && item.message.includes("head-commit")));
+  const sessionStart = run("hook", "session-start", "--root", sandbox);
+  assert.equal(sessionStart.status, 0, sessionStart.stderr);
+  assert.match(sessionStart.stdout, /Repository context refreshed/);
+  assert.ok(readMap().instruction_contracts.some((item) => item.path === "AGENTS.md"));
+  const current = JSON.parse(run("check", "--root", sandbox, "--json").stdout);
+  assert.equal(current.findings.some((item) => item.code === "reconciliation-required"), false);
+});
+
 test("reconcile migrates legacy repository context even when evidence is unchanged", () => {
   assert.equal(run("init", "--root", sandbox).status, 0);
   const manifestPath = join(sandbox, ".mauro/manifest.json");
@@ -773,6 +929,11 @@ test("reconcile migrates legacy repository context even when evidence is unchang
   manifest.schema_version = 1;
   for (const navigator of Object.values(manifest.navigators)) delete navigator.generated_skill;
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const mapPath = join(sandbox, ".mauro/map.json");
+  const map = JSON.parse(readFileSync(mapPath, "utf8"));
+  delete map.instruction_contracts;
+  delete map.instruction_duplicate_groups;
+  writeFileSync(mapPath, `${JSON.stringify(map, null, 2)}\n`);
 
   const before = run("check", "--root", sandbox);
   assert.equal(before.status, 0, before.stderr);
@@ -780,6 +941,7 @@ test("reconcile migrates legacy repository context even when evidence is unchang
   const diagnosis = JSON.parse(run("doctor", "--root", sandbox, "--json").stdout);
   assert.equal(diagnosis.migration.required, true);
   assert.equal(diagnosis.migration.supported, true);
+  assert.ok(diagnosis.migration.reasons.includes("instruction-contracts"));
 
   const migrated = run("reconcile", "--root", sandbox, "--json");
   assert.equal(migrated.status, 0, migrated.stderr);
@@ -792,6 +954,7 @@ test("reconcile migrates legacy repository context even when evidence is unchang
     assert.ok(navigator.generated_skill);
     assert.equal(existsSync(join(sandbox, navigator.generated_skill)), true);
   }
+  assert.ok(Array.isArray(readMap().instruction_contracts));
   assert.equal(JSON.parse(run("reconcile", "--root", sandbox, "--json").stdout).updated, false);
 });
 

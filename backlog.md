@@ -149,3 +149,23 @@ state or performing overlapping work by accident.
 - [x] Warn before semantic surveys when an agent instruction file exceeds the
   conservative host-context threshold.
 - [x] Report Map publication independently from Bearing health.
+
+### Instruction Contract monitoring
+
+- [x] Discover common agent instruction formats with configurable patterns.
+- [x] Record provider, directory scope, parent, precedence, and human ownership.
+- [x] Register direct binding fingerprints that ordinary scan filters cannot
+  disable.
+- [x] Surface applicable contracts in Maps, status, doctor, and task briefs.
+- [x] Report excessive size and exact duplication without rewriting the files.
+- [x] Make changed or missing contracts block the Bearing check.
+
+### Commit-aware reconciliation triggers
+
+- [x] Trigger a full refresh when `HEAD` changes on a clean working tree.
+- [x] Record local canonical-ref and canonical-commit movement without fetching
+  or inspecting another branch.
+- [x] Refresh through SessionStart and Stop after commits, branch switches, and
+  fast-forwards.
+- [x] Discover new Instruction Contracts after the checkout receives canonical
+  changes.

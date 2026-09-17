@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { extname, relative } from "node:path";
-import { DEFAULT_FIXTURE_PATTERNS, DEFAULT_GENERATED_PATTERNS, DEFAULT_TEST_PATTERNS, STRUCTURAL_NAMES } from "./constants.mjs";
+import { DEFAULT_FIXTURE_PATTERNS, DEFAULT_GENERATED_PATTERNS, DEFAULT_INSTRUCTION_PATTERNS, DEFAULT_TEST_PATTERNS, INSTRUCTION_FILE_WARNING_BYTES, STRUCTURAL_NAMES } from "./constants.mjs";
 import { exclusionMatch, fileName, matchesGlob, toPosix } from "./fs.mjs";
 import { gitIgnoredRegions } from "./git.mjs";
 
@@ -74,7 +74,7 @@ export function validateConfig(config) {
     }
   }
   const scan = objectAt(root.scan, "scan");
-  keysAt(scan, ["packages", "package_overrides", "tests", "fixtures", "generated", "documents", "gitignored", "paths", "languages", "max_file_size", "follow_symlinks", "full_expedition_move_threshold"], "scan");
+  keysAt(scan, ["packages", "package_overrides", "tests", "fixtures", "generated", "documents", "instructions", "gitignored", "paths", "languages", "max_file_size", "follow_symlinks", "full_expedition_move_threshold"], "scan");
   const packages = objectAt(scan.packages, "scan.packages");
   keysAt(packages, ["include", "exclude", "excluded_behavior"], "scan.packages");
   selectorAt(packages.include, "scan.packages.include");
@@ -96,6 +96,14 @@ export function validateConfig(config) {
   if (!DOCUMENT_MODES.has(documents.mode)) invalid("scan.documents.mode must be full, selected, or exclude.");
   stringArrayAt(documents.include, "scan.documents.include");
   stringArrayAt(documents.exclude, "scan.documents.exclude");
+  if (scan.instructions !== undefined) {
+    const instructions = objectAt(scan.instructions, "scan.instructions");
+    keysAt(instructions, ["patterns", "size_warning_bytes"], "scan.instructions");
+    stringArrayAt(instructions.patterns, "scan.instructions.patterns");
+    if (!Number.isInteger(instructions.size_warning_bytes) || instructions.size_warning_bytes < 1024) {
+      invalid("scan.instructions.size_warning_bytes must be an integer of at least 1024 bytes.");
+    }
+  }
   if (scan.gitignored !== undefined) {
     const gitignored = objectAt(scan.gitignored, "scan.gitignored");
     keysAt(gitignored, ["default", "include", "exclude", "hide"], "scan.gitignored");
@@ -131,6 +139,19 @@ function patterns(config, key, defaults) {
 
 export function matchesAny(path, candidates = []) {
   return candidates.some((pattern) => matchesGlob(pattern, path) || (!pattern.includes("/") && matchesGlob(pattern, fileName(path))));
+}
+
+export function instructionPatterns(config) {
+  const configured = config.scan?.instructions?.patterns;
+  return Array.isArray(configured) ? configured : DEFAULT_INSTRUCTION_PATTERNS;
+}
+
+export function instructionWarningBytes(config) {
+  return config.scan?.instructions?.size_warning_bytes || INSTRUCTION_FILE_WARNING_BYTES;
+}
+
+export function isInstructionPath(path, config) {
+  return matchesAny(path, instructionPatterns(config));
 }
 
 function normalizePolicyPath(path) {
@@ -338,4 +359,24 @@ export function fingerprintOptions(config, map, root, ignoredPolicy = createGiti
 export function fingerprintExcludes(config, map, watched = ".", ignoredPolicy = null) {
   const excludes = [...walkExcludes(config), ...(ignoredPolicy?.walkExcludes || [])];
   return [...new Set(excludes)];
+}
+
+// Instruction Contracts are direct file watches. Ordinary source, document,
+// language and package filters must not make a discovered contract invisible.
+// Hard safety exclusions still apply inside fingerprintPath.
+export function documentFingerprintPolicy(document, watched, config, map, root, ignoredPolicy = createGitignoredPolicy(root, config)) {
+  if (document?.kind === "instruction-contract") {
+    return {
+      excludes: [],
+      options: {
+        ...scannerOptions(config),
+        followFileSymlinks: config.scan?.follow_symlinks === true,
+        acceptFile: (path) => isInstructionPath(path, config)
+      }
+    };
+  }
+  return {
+    excludes: fingerprintExcludes(config, map, watched, ignoredPolicy),
+    options: fingerprintOptions(config, map, root, ignoredPolicy)
+  };
 }

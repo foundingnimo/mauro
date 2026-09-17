@@ -15,6 +15,7 @@ Check:
 - Missing, stale, or superseded records
 - Inline marker resolution
 - Documentation dependencies
+- Instruction Contract registration, scope, size, and fingerprints
 - Generated rule sources
 - Generated Navigator sources
 - Map schema version
@@ -53,6 +54,12 @@ move, capability ownership becomes unreliable, or the Map schema changes.
 Binding documents block completion when suspect or stale. Operational documents
 require review. Informational documents produce warnings. Historical documents
 are never suspect. The Bearing check ignores their watches.
+
+Instruction Contracts are binding and human-owned. Mauro monitors their files
+directly, even when ordinary document, language, role, or package filters would
+omit them. A changed or missing contract blocks the Bearing check until a
+review confirms it or an approved change corrects it. Generated Maps and
+briefs can summarize a contract. They do not replace it.
 
 ## Stale documents: code wins
 
@@ -118,10 +125,14 @@ the user asks. Do not run it for each commit. Each review is an agent run.
 
 Hooks record changed paths. Stop and SessionStart hooks also inspect Git status
 because shell commands can bypass Edit and Write hooks. Mauro compares a
-path-and-content signature with the last reconciliation, then refreshes the Map
-only when evidence changed. Session-start checks report suspect records. A host
-without Mauro lifecycle hooks runs `mauro reconcile` through the ambient skill.
-CI can run the same deterministic Bearing check.
+path-and-content signature, `HEAD`, configured canonical ref, and locally
+available canonical commit with the last reconciliation. It refreshes the Map
+after dirty evidence, a clean commit, a branch switch, or a fast-forward. If
+only the canonical branch moved, Mauro records and reports the change. It does
+not inspect that branch or refresh trusted context until the checkout is
+updated. Session-start checks report suspect records. A host without Mauro
+lifecycle hooks runs `mauro reconcile` through the ambient skill. CI can run
+the same deterministic Bearing check.
 
 Never rewrite human-owned documentation silently. Generate a proposal and show
 the diff.

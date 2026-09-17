@@ -10,6 +10,15 @@ export const MANIFEST_SCHEMA_VERSION = 2;
 export const MAX_PERIMETER_REGIONS = 500;
 export const INSTRUCTION_FILE_WARNING_BYTES = 150_000;
 
+export const DEFAULT_INSTRUCTION_PATTERNS = Object.freeze([
+  "AGENTS.md",
+  "CLAUDE.md",
+  "GEMINI.md",
+  ".cursorrules",
+  ".github/copilot-instructions.md",
+  ".cursor/rules/**"
+]);
+
 export const PATHS = Object.freeze({
   state: ".mauro",
   config: ".mauro/config.json",

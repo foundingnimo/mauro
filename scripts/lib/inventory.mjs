@@ -1,13 +1,15 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, relative } from "node:path";
-import { INSTRUCTION_FILE_WARNING_BYTES, MAURO_VERSION, MANIFEST_FILES, MAX_PERIMETER_REGIONS, SCHEMA_VERSION } from "./constants.mjs";
-import { fileName, fingerprintFile, repoPath, toPosix, walkFiles } from "./fs.mjs";
+import { MAURO_VERSION, MANIFEST_FILES, MAX_PERIMETER_REGIONS, SCHEMA_VERSION } from "./constants.mjs";
+import { fileName, fingerprintFile, repoPath, sha256Buffer, toPosix, walkFiles } from "./fs.mjs";
 import { gitBaseline } from "./git.mjs";
 import {
   documentAllowed,
   createGitignoredPolicy,
   effectiveMode,
+  isInstructionPath,
   isDocumentPath,
+  instructionWarningBytes,
   languageAllowed,
   languageForPath,
   packageScope,
@@ -18,19 +20,61 @@ import {
 } from "./policy.mjs";
 
 const REVIEWABLE_IGNORED_PATH = /(^|\/)(adr|architecture|design|docs?|examples?|infra|schemas?|stories|storybook)(\/|$)/i;
-const INSTRUCTION_FILE_NAMES = new Set(["AGENTS.md", "CLAUDE.md"]);
 
-function instructionFileWarnings(root, paths) {
-  return paths
-    .filter((path) => INSTRUCTION_FILE_NAMES.has(fileName(path)))
-    .map((path) => ({ path, size_bytes: statSync(repoPath(root, path)).size }))
-    .filter((file) => file.size_bytes > INSTRUCTION_FILE_WARNING_BYTES)
-    .map((file) => ({
-      ...file,
-      warning_threshold_bytes: INSTRUCTION_FILE_WARNING_BYTES,
-      reason: "host-context-limit"
-    }))
+function instructionType(path) {
+  const name = fileName(path);
+  if (name === "AGENTS.md") return { kind: "agents", providers: ["codex"] };
+  if (name === "CLAUDE.md") return { kind: "claude", providers: ["claude"] };
+  if (name === "GEMINI.md") return { kind: "gemini", providers: ["gemini"] };
+  if (name === ".cursorrules" || path.includes("/.cursor/rules/") || path.startsWith(".cursor/rules/")) return { kind: "cursor", providers: ["cursor"] };
+  if (path === ".github/copilot-instructions.md") return { kind: "copilot", providers: ["github-copilot"] };
+  return { kind: "custom", providers: ["unspecified"] };
+}
+
+function instructionScope(path) {
+  const cursorMarker = path.indexOf("/.cursor/rules/");
+  if (cursorMarker !== -1) return path.slice(0, cursorMarker) || ".";
+  if (path.startsWith(".cursor/rules/") || path === ".github/copilot-instructions.md") return ".";
+  return dirname(path) === "." ? "." : dirname(path);
+}
+
+function scopeContains(parent, child) {
+  if (parent === child) return false;
+  return parent === "." || child.startsWith(`${parent}/`);
+}
+
+function instructionContracts(root, paths, config) {
+  const threshold = instructionWarningBytes(config);
+  const contracts = paths
+    .filter((path) => isInstructionPath(path, config))
+    .map((path) => {
+      const absolute = repoPath(root, path);
+      const size = statSync(absolute).size;
+      const type = instructionType(path);
+      return {
+        id: `instruction-${slug(path)}-${sha256Buffer(Buffer.from(path)).slice(7, 15)}`,
+        path,
+        ...type,
+        scope: instructionScope(path),
+        parent: null,
+        precedence: "nearest-scope",
+        ownership: "human",
+        size_bytes: size,
+        warning_threshold_bytes: threshold,
+        over_limit: size > threshold,
+        digest: size > config.scan.max_file_size ? null : fingerprintFile(absolute)
+      };
+    })
     .sort((left, right) => left.path.localeCompare(right.path));
+  for (const contract of contracts) {
+    const parents = contracts
+      .filter((candidate) => candidate.id !== contract.id
+        && candidate.providers.some((provider) => contract.providers.includes(provider))
+        && scopeContains(candidate.scope, contract.scope))
+      .sort((left, right) => right.scope.length - left.scope.length || left.path.localeCompare(right.path));
+    contract.parent = parents[0]?.id || null;
+  }
+  return contracts;
 }
 
 function boundaryClassification(path, kind, config) {
@@ -235,7 +279,15 @@ export function scanRepository(root, config = {}) {
       }
     }
   );
-  const instructionWarnings = instructionFileWarnings(root, candidatePaths);
+  const instructions = instructionContracts(root, candidatePaths, config);
+  const instructionWarnings = instructions
+    .filter((contract) => contract.over_limit)
+    .map((contract) => ({
+      path: contract.path,
+      size_bytes: contract.size_bytes,
+      warning_threshold_bytes: contract.warning_threshold_bytes,
+      reason: "host-context-limit"
+    }));
   let allUnits = groupedManifestUnits(root, candidatePaths, config);
   if (allUnits.length === 0) allUnits = fallbackUnits(candidatePaths, config);
   const visibleUnits = allUnits.filter((unit) => unit.scope !== "omit");
@@ -357,6 +409,27 @@ export function scanRepository(root, config = {}) {
       detail: `${duplicateGroups.length} exact duplicate group(s) need semantic review.`
     });
   }
+  const instructionGroups = new Map();
+  for (const contract of instructions.filter((item) => item.digest)) {
+    const group = instructionGroups.get(contract.digest) || [];
+    group.push(contract.path);
+    instructionGroups.set(contract.digest, group);
+  }
+  const instructionDuplicateGroups = [...instructionGroups.entries()]
+    .filter(([, group]) => group.length > 1)
+    .map(([digest, group], index) => ({
+      id: `instruction-duplicate-${index + 1}`,
+      digest,
+      paths: group.sort()
+    }));
+  if (instructionDuplicateGroups.length) {
+    anomalies.push({
+      kind: "duplicate-instruction-contracts",
+      severity: "information",
+      detail: `${instructionDuplicateGroups.length} exact duplicate instruction contract group(s) need scope review.`,
+      evidence: instructionDuplicateGroups.flatMap((group) => group.paths)
+    });
+  }
 
   const omittedUnitRoots = allUnits.filter((unit) => unit.scope === "omit").map((unit) => unit.root);
   const allPerimeterRegions = [...perimeterByPath.values()]
@@ -390,8 +463,11 @@ export function scanRepository(root, config = {}) {
       gitignored_scanned_files: gitignoredScannedFiles,
       hidden_ignored_regions: hiddenIgnoredRegions,
       review_required_regions: reviewRequiredRegions.length,
+      instruction_contracts: instructions.length,
       instruction_file_warnings: instructionWarnings.length
     },
+    instruction_contracts: instructions,
+    instruction_duplicate_groups: instructionDuplicateGroups,
     instruction_file_warnings: instructionWarnings,
     perimeter_regions: perimeterRegions,
     files,

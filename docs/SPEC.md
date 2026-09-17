@@ -56,8 +56,9 @@ automatic migration and requires a newer tool or manual recovery.
 
 1. Record the Git baseline and dirty-tree state.
 2. Inventory source, tests, documents, manifests, and exact duplicates.
-3. Report `AGENTS.md` and `CLAUDE.md` files above the conservative host-context
-   threshold before semantic surveys. The warning does not block the scan.
+3. Record configured agent instruction files as scoped, human-owned Instruction
+   Contracts. Report contracts above the conservative host-context threshold
+   before semantic surveys. The warning does not block the scan.
 4. Use independent read-only surveys for structure, capabilities, documents,
    and duplication.
 5. Cite file or test evidence for semantic claims.
@@ -99,6 +100,19 @@ The default generated patterns do not include `vendor/` or `build/`. Those
 names are ambiguous across repositories. A repository can add exact patterns
 after it verifies that the matching content is generated output.
 
+`scan.instructions.patterns` identifies Instruction Contracts. The defaults
+cover `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`,
+`.github/copilot-instructions.md`, and `.cursor/rules/**`. A configured array
+replaces the defaults. `scan.instructions.size_warning_bytes` sets the host
+context warning threshold.
+
+Each contract records its provider, directory scope, nearest parent for that
+provider, nearest-scope precedence, human ownership, size, and digest. Mauro
+registers the file as a binding document that watches itself. Its direct
+fingerprint is not disabled by ordinary role, document, language, or package
+filters. A change or deletion blocks the Bearing check. Mauro can propose a
+split or correction. It must not edit a human-owned contract without approval.
+
 Git-ignored paths use a separate policy. `record` is the default: Mauro records
 the region boundary but does not enumerate or read its contents. `scan` permits
 content inspection, subject to all other scan policies. The `include` list
@@ -119,7 +133,8 @@ Mauro applies scan policy in this order:
 4. Package include and exclude selectors set unit scope.
 5. Package overrides and global role modes set file treatment.
 6. Document selection, path exclusions, and language filters reduce the result.
-7. The maximum file size prevents content hashing and semantic inspection.
+7. Discovered Instruction Contracts receive direct binding fingerprints.
+8. The maximum file size prevents content hashing and semantic inspection.
 
 Structural manifests remain visible through a language filter. Symlink following
 is off by default. When it is on, Mauro follows only targets inside the repository.
@@ -131,6 +146,12 @@ generated knowledge suspect. Content-only changes inside a record-only region do
 not. A Map update updates fingerprints for generated Navigator views. Active
 human knowledge keeps its previous verification baseline until a verifier checks
 the new evidence scope.
+
+Reconciliation records the dirty-tree signature, `HEAD`, configured canonical
+ref, and locally available canonical commit. A changed `HEAD` triggers a scan
+even when the working tree is clean. A canonical-only change does not authorize
+Mauro to inspect another branch. Mauro records and reports it, then scans after
+the checkout moves to the new history. Mauro never fetches.
 
 ## Knowledge requirements
 

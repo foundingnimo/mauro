@@ -294,6 +294,8 @@ function doctor(root, pluginRoot, json, args = []) {
     result.bearing = summary.bearing;
     result.publication = summary.publication;
     result.git = summary.git;
+    result.instructions = summary.instructions;
+    result.reconciliation = summary.reconciliation;
   }
   output(result, json);
   if (installation.some((item) => !item.present) || !adapters.healthy) process.exitCode = 1;
@@ -403,7 +405,8 @@ export async function runCli(argv = process.argv.slice(2)) {
       "Restart agent sessions that cache repository skills or agents."
     ];
     if (instructionWarnings.length) next.unshift("Review oversized agent instruction files before relying on complete host context.");
-    return output({ outcome: "Expedition scaffold created", root, canonical: result.canonical, files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, instruction_file_warnings: instructionWarnings, capabilities: result.map.capabilities.length, next }, json);
+    const instructionContracts = (result.map.instruction_contracts || []).map(({ id, path, kind, providers, scope, parent, over_limit }) => ({ id, path, kind, providers, scope, parent, over_limit }));
+    return output({ outcome: "Expedition scaffold created", root, canonical: result.canonical, files: result.map.files.length, units: result.map.units.length, stubs: result.map.scan_summary.stub_units, omitted_units: result.map.scan_summary.omitted_units, perimeter_regions: result.map.scan_summary.perimeter_regions, review_required_regions: result.map.scan_summary.review_required_regions, instruction_contracts: instructionContracts, instruction_file_warnings: instructionWarnings, capabilities: result.map.capabilities.length, next }, json);
   }
   if (!isInitialized(root)) throw new Error("Mauro is not initialized. Run `mauro init`.");
 
