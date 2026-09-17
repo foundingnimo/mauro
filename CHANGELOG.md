@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.2 (2026-09-17)
+
 - Add a deterministic, role-specific Expedition survey-report validator that
   checks JSON, baseline, paths, glob syntax, confidence, Tool Gap fields,
   report size, and inventory coverage before synthesis.
