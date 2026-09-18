@@ -22,6 +22,15 @@ documentation, and business capabilities can disagree.
 - A **Brief** is deterministic, bounded task context for a host coding agent.
 - **Reconciliation** refreshes derived context after repository evidence changes.
 
+A Brief ranks normalized exact lexical evidence from capability identities,
+purposes, evidence, and paths. It selects at most three responsible
+capabilities, then expands only explicit review relationships to at most two
+reviewing Navigators. It reports the best matching primary paths, preserves all
+Instruction Contracts applicable to those paths, and limits supporting
+documents and proposed verification commands to eight each. Ranking is an
+orientation aid. A Navigator must verify semantic scope against code before
+implementation.
+
 ## Ambient operation requirements
 
 The host agent invokes Mauro as part of normal repository work. A person does
@@ -31,11 +40,84 @@ a Brief for the objective, and reads the relevant Navigators, Charter, and
 active knowledge. Routine success stays quiet. Conflicts, suspect context,
 preliminary boundaries, and required approvals remain visible.
 
+An orientation-only request reads the selected Navigator views directly and
+uses bounded checks to verify the claims needed for the answer. It does not
+automatically launch one specialist agent per selected Navigator. The host
+delegates only when the user requests deeper investigation or review,
+implementation planning benefits from independent cross-capability evidence,
+or direct checks leave a material ambiguity. When it delegates, it collects
+and reconciles the results before returning one substantive answer. Incidental
+findings stay out unless they block the work, create a safety risk, or change
+the immediate decision.
+
+When current evidence contradicts the requested premise, or two materially
+different interpretations remain, the host returns the concise evidence and
+one decision question first. It does not spend context on paths, risks, checks,
+or a plan for an assumed interpretation unless the user requested a contingent
+plan. Detailed briefing resumes after the user confirms the intended change.
+
+Every Brief carries a mandatory pre-response gate. The host runs it silently
+immediately before each substantive answer and revises a failing draft before
+it sends the answer. When the verified premise already holds or two materially
+different interpretations remain, and the user did not request detailed
+evidence or a contingent plan, the gate permits only one concise verified
+conclusion, one material freshness caveat when needed, and exactly one focused
+decision question. It rejects ownership or specialist lists, path inventories,
+risks, verification checks, speculative implementation, adjacent findings,
+and routine command or write-status narration.
+
+For all other answers, the gate removes material that does not change the
+answer or the immediate decision. Its final check asks whether verified
+friction is a Mauro improvement candidate. Contribution handling does not add
+a second question to a response that needs a decision gate.
+
+Ambient reconciliation is an authorized Mauro-state write, including during a
+read-only repository request. The host must not replace it with timestamps,
+Git status, or a read-only Brief. Routine successful maintenance stays out of
+the answer. The host reports only a changed conclusion, stale context,
+conflict, failure, or required decision.
+
+An explicit instruction to make no repository writes overrides ambient
+maintenance. In that case the host runs the read-only reconciliation preview.
+The preview reports pending paths, triggers, migration work, and local
+canonical movement. It does not update the Map, generated views, change queue,
+fingerprints, or reconciliation metadata. The host uses the preview when it
+briefs the task and does not describe reconciliation as skipped.
+
+When the checkout is behind canonical history, the host reports only Mauro's
+ref, commit, and relationship metadata. It must not inspect canonical files,
+diffs, or commit messages with Git commands. Evidence remains valid for the
+current checkout and is verified again after the checkout moves. Model memory,
+host or auto-memory files, saved session notes, and previous-session
+observations can guide verification, but they are not repository evidence.
+Notes attributed to the user are not current user input. None appear in an
+answer unless current evidence, the current request, or approved active Mauro
+knowledge confirms them.
+
 Reconciliation can update machine state, the observed Map, generated
 Navigator views, and freshness findings. It does not change product code or
 human-owned intent. Changes to the Charter, curated knowledge, capability
 boundaries, repository structure, pull requests, commits, pushes, or deploys
 stay behind explicit human approval.
+
+Mauro can identify limitations in Mauro itself. A candidate must describe a
+Mauro command, adapter, hook, policy, generated view, missing reusable
+operation, avoidable execution cost, compatibility problem, or safety
+conflict. An ordinary defect or architecture finding in the target repository
+is not a Mauro candidate.
+
+Candidate records are private user state outside the target repository and
+installed runtime. They contain generalized text only: no target-repository
+names, absolute paths, tickets, product code, raw logs, credentials, secrets,
+or customer data. A stable key deduplicates repeated observations. Mauro offers
+to prepare a suggestion or pull request only when it creates a new candidate.
+
+A contribution preview is local and shows the exact proposed title and body.
+Creating an issue, branch, commit, push, or pull request is an external change
+and needs explicit authorization. Pull-request work uses a Mauro source
+checkout, never the installed runtime, and includes a regression test plus the
+normal test and validation commands. Mauro records the returned upstream URL
+only after submission succeeds.
 
 Canonical state is provider-neutral. A host adapter can add discovery, hooks,
 or delegation behavior, but must not change the meaning of that state. Claude
@@ -46,6 +128,11 @@ for automatic invocation during ordinary repository work. `mauro` is eligible
 only after an explicit user command. A standalone runtime lives outside any
 provider directory. Host profiles install adapters without forking canonical
 state or deterministic behavior.
+
+Before a Brief returns proposed verification, it removes an npm script command
+when another selected command for the same current package manifest invokes
+that script. The host applies the same rule to checks it discovers directly.
+It does not claim script coverage without current manifest evidence.
 
 A supported older repository-state schema is upgraded by reconciliation before
 normal freshness decisions. Migration regenerates derived views and preserves

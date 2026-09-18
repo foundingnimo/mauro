@@ -10,7 +10,7 @@ import { renderPrContext } from "./lib/render.mjs";
 import { nextSteps, renderNext } from "./lib/next.mjs";
 import { confirmDocument, renderReview, reviewPackets } from "./lib/review.mjs";
 import { assertCanonicalCurrent } from "./lib/freshness.mjs";
-import { initialize, isInitialized, loadState, pluginRootFrom, reconcile, repositoryMigrationStatus, updateMap } from "./lib/state.mjs";
+import { initialize, isInitialized, loadState, pluginRootFrom, previewReconciliation, reconcile, repositoryMigrationStatus, updateMap } from "./lib/state.mjs";
 import { runHook } from "./hook.mjs";
 import { charterState, REQUIRED_CHARTER_HEADINGS, requireCharter } from "./lib/charter.mjs";
 import { describeTool, listTools, runTool } from "./lib/toolbox.mjs";
@@ -19,6 +19,7 @@ import { clearStaleProjectLock, projectLockStatus } from "./lib/lock.mjs";
 import { abandonVoyage, activateVoyage, createVoyage, finishVoyage, getVoyage, listVoyages, resumeVoyage, summarizeVoyages } from "./lib/voyages.mjs";
 import { buildBrief, renderBrief } from "./lib/brief.mjs";
 import { adapterStatus } from "./lib/adapters.mjs";
+import { clearStaleContributionLock, contributionLockStatus, contributionStatePath, dismissContribution, listContributions, markContributionSubmitted, previewContribution, recordContribution, showContribution } from "./lib/contributions.mjs";
 
 function option(args, name) {
   const index = args.indexOf(name);
@@ -273,12 +274,75 @@ function prCommand(root, action, args) {
   if (action === "check" && !report.ok) process.exitCode = 1;
 }
 
+function contributeCommand(action, args, json) {
+  if (!action || action === "list" || action === "status") {
+    const status = option(args, "--status");
+    if (status === true) throw new Error("--status requires a value.");
+    rejectArguments(args, "mauro contribute list [--status <candidate|dismissed|submitted>]");
+    return output(listContributions(status || "all"), json);
+  }
+  if (action === "doctor") {
+    const clearLock = option(args, "--clear-stale-lock");
+    if (clearLock !== null && clearLock !== true) throw new Error("--clear-stale-lock does not take a value.");
+    rejectArguments(args, "mauro contribute doctor [--clear-stale-lock]");
+    const lockCleanup = clearLock ? clearStaleContributionLock() : null;
+    return output({ state_path: contributionStatePath(), lock_cleanup: lockCleanup, contribution_lock: contributionLockStatus() }, json);
+  }
+  if (action === "record") {
+    const result = recordContribution({
+      key: requiredOption(args, "--key"),
+      type: requiredOption(args, "--type"),
+      title: requiredOption(args, "--title"),
+      observed: requiredOption(args, "--observed"),
+      expected: requiredOption(args, "--expected"),
+      source: requiredOption(args, "--source")
+    });
+    rejectArguments(args, "mauro contribute record --key <slug> --type <bug|enhancement> --title <text> --observed <text> --expected <text> --source <ambient|tool-gap|user>");
+    return output(result, json);
+  }
+  if (action === "show") {
+    const id = args.shift();
+    if (!id) throw new Error("Usage: mauro contribute show <MI-0001>");
+    rejectArguments(args, "mauro contribute show <MI-0001>");
+    return output(showContribution(id), json);
+  }
+  if (action === "preview") {
+    const id = args.shift();
+    if (!id) throw new Error("Usage: mauro contribute preview <MI-0001> --as <suggestion|pr>");
+    const format = requiredOption(args, "--as");
+    rejectArguments(args, "mauro contribute preview <MI-0001> --as <suggestion|pr>");
+    const preview = previewContribution(id, format);
+    return output(json ? preview : `${preview.title}\n\n${preview.body}`, json);
+  }
+  if (action === "dismiss") {
+    const id = args.shift();
+    if (!id) throw new Error("Usage: mauro contribute dismiss <MI-0001> --reason <reason>");
+    const reason = requiredOption(args, "--reason");
+    rejectArguments(args, "mauro contribute dismiss <MI-0001> --reason <reason>");
+    return output(dismissContribution(id, reason), json);
+  }
+  if (action === "submitted") {
+    const id = args.shift();
+    if (!id) throw new Error("Usage: mauro contribute submitted <MI-0001> --as <suggestion|pr> --url <url>");
+    const format = requiredOption(args, "--as");
+    const url = requiredOption(args, "--url");
+    rejectArguments(args, "mauro contribute submitted <MI-0001> --as <suggestion|pr> --url <url>");
+    return output(markContributionSubmitted(id, format, url), json);
+  }
+  throw new Error(`Unknown contribute action: ${action}`);
+}
+
 // install.sh writes .install.json beside the runtime so a person can tell which
 // checkout and commit an installation came from without diffing directories.
 function installStamp(pluginRoot) {
   const path = resolve(pluginRoot, ".install.json");
   if (!exists(path)) return null;
   try { return readJson(path); } catch { return null; }
+}
+
+function installRevision(stamp) {
+  const commit = stamp?.commit || "no commit";
+  return stamp?.dirty === true ? `${commit}-dirty` : commit;
 }
 
 function doctor(root, pluginRoot, json, args = []) {
@@ -376,7 +440,7 @@ export async function runCli(argv = process.argv.slice(2)) {
   if (command === "--help" || command === "-h") command = "help";
   if (command === "--version" || command === "-v" || command === "version") {
     const stamp = installStamp(pluginRootFrom(import.meta.url));
-    return output(stamp ? `mauro ${MAURO_VERSION} (${stamp.commit || "no commit"}, installed ${stamp.installed_at || "unknown"} from ${stamp.source || "unknown"})` : `mauro ${MAURO_VERSION}`);
+    return output(stamp ? `mauro ${MAURO_VERSION} (${installRevision(stamp)}, installed ${stamp.installed_at || "unknown"} from ${stamp.source || "unknown"})` : `mauro ${MAURO_VERSION}`);
   }
   command = ALIASES[command] || command || "help";
   if (args.includes("--help")) return output(help(command));
@@ -394,6 +458,7 @@ export async function runCli(argv = process.argv.slice(2)) {
   }
   if (command === "doctor") return doctor(root, pluginRoot, json, args);
   if (command === "tool") return toolCommand(root, args.shift(), args, json);
+  if (command === "contribute") return contributeCommand(args.shift(), args, json);
   if (command === "init") {
     const canonicalRef = option(args, "--canonical-ref");
     if (canonicalRef === true) throw new Error("--canonical-ref requires a branch name.");
@@ -422,9 +487,11 @@ export async function runCli(argv = process.argv.slice(2)) {
   if (command === "reconcile") {
     const reconcileArgs = [action, ...args].filter(Boolean);
     const force = option(reconcileArgs, "--force");
+    const dryRun = option(reconcileArgs, "--dry-run");
     if (force !== null && force !== true) throw new Error("--force does not take a value.");
-    rejectArguments(reconcileArgs, "mauro reconcile [--force]");
-    return output(reconcile(root, { force: Boolean(force) }), json);
+    if (dryRun !== null && dryRun !== true) throw new Error("--dry-run does not take a value.");
+    rejectArguments(reconcileArgs, "mauro reconcile [--force] [--dry-run]");
+    return output(dryRun ? previewReconciliation(root, { force: Boolean(force) }) : reconcile(root, { force: Boolean(force) }), json);
   }
   if (command === "check") {
     const report = checkRepository(root);

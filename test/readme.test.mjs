@@ -30,7 +30,7 @@ test("README lists every public command and frequent alias", () => {
 test("README overview includes durable coordination state", () => {
   const overview = section("# Mauro", "## Quickstart");
   assert.doesNotMatch(overview, /Mauro has four durable outputs/);
-  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal", "Map-publication", "Instruction Contracts", "validation of isolated Expedition survey reports"]) {
+  for (const text of ["Voyage records", "Tool Gap Log", "Atomic writer locking", "overlapping-path refusal", "Map-publication", "Instruction Contracts", "validation of isolated Expedition survey reports", "mandatory pre-response gate"]) {
     assert.ok(overview.includes(text), `README overview is missing: ${text}`);
   }
 });
@@ -42,15 +42,77 @@ test("README documents the survey validation gate", () => {
   }
 });
 
-test("README keeps the autonomous Quickstart and shared Navigator contract", () => {
+test("README gives the complete sidecar installation and first-run contract", () => {
   const quickstart = section("## Quickstart", "## Install");
-  for (const command of ["/mauro init", "/mauro next", "/mauro brief", "/mauro run", "/mauro run activate", "/mauro run finish", "/mauro reconcile", "/mauro check", "/mauro help"]) {
-    assert.ok(quickstart.includes(command), `Quickstart is missing ${command}`);
-  }
-  for (const text of ["asks which exact branch", "--canonical-ref <selected-branch>", "It does not infer the answer", "agent instruction files as human-owned Instruction Contracts"]) {
-    assert.ok(quickstart.includes(text), `Quickstart is missing canonical-branch guidance: ${text}`);
+  const normalizedQuickstart = quickstart.replace(/\s+/g, " ");
+  for (const text of [
+    "Sidecar mode is the recommended way",
+    "Node.js 22 or newer",
+    "./install.sh --host all",
+    "./install.ps1 -TargetHost all",
+    "~/.mauro/bin/mauro --version",
+    "restart every open coding-agent session",
+    "normal repository request",
+    "You do not need to run `/mauro init` first",
+    "canonical branch",
+    "does not infer the answer",
+    "never fetches, switches, merges, or rebases",
+    "first Expedition can take significant time and tokens",
+    "does not edit product code",
+    ".mauro/",
+    "docs/mauro/",
+    ".agents/skills/",
+    ".claude/agents/",
+    "complete sidecar setup",
+  ]) {
+    assert.ok(normalizedQuickstart.includes(text), `Quickstart is missing sidecar guidance: ${text}`);
   }
 
+  const install = section("## Install", "## Main commands");
+  const normalizedInstall = install.replace(/\s+/g, " ");
+  for (const text of ["### Sidecar installation", "--host claude", "--host shared", "--host all", "--no-hooks", "mauro doctor --root .", "git pull --ff-only", "--update --host all"]) {
+    assert.ok(normalizedInstall.includes(text), `Install reference is missing sidecar guidance: ${text}`);
+  }
+
+  for (const command of ["/mauro init", "/mauro brief", "/mauro run", "/mauro reconcile", "/mauro status", "/mauro doctor", "/mauro help"]) {
+    assert.ok(normalizedQuickstart.includes(command), `Quickstart is missing optional command ${command}`);
+  }
+});
+
+test("README explains safe upstream Mauro contributions", () => {
+  const install = section("## Install", "## Main commands");
+  const normalizedInstall = install.replace(/\s+/g, " ");
+  for (const text of [
+    "### Contribute back",
+    "/mauro contribute",
+    "private user state",
+    "GitHub suggestion",
+    "code pull request",
+    "explicit authorization",
+    "never in `~/.mauro`",
+    "CONTRIBUTING.md"
+  ]) {
+    assert.ok(normalizedInstall.includes(text), `README contribution guidance is missing: ${text}`);
+  }
+});
+
+test("README gives a complete release sequence", () => {
+  const release = section("### Releasing", "### Plugin development");
+  for (const text of [
+    "## Unreleased",
+    "clean working tree",
+    "git status --short",
+    "git add -A",
+    "git commit",
+    "npm version minor",
+    "git push --follow-tags",
+    "Use `minor` for backward-compatible features"
+  ]) {
+    assert.ok(release.includes(text), `README release guidance is missing: ${text}`);
+  }
+});
+
+test("README keeps the shared Navigator contract", () => {
   const sharing = section("## Use Navigators from any agent session", "## Configure an Expedition");
   for (const text of [".agents/skills/", ".claude/agents/", ".claude/rules/mauro/", ".mauro/voyages/", "docs/mauro/", "/agents", "/mauro who <path>", "/mauro impact", "read-only", "Restart a", "mauro run status"]) {
     assert.ok(sharing.includes(text), `Navigator sharing guidance is missing: ${text}`);

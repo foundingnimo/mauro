@@ -27,8 +27,8 @@ commands.
 
 ## Infrequent commands
 
-`brief`, `charter`, `doctor`, `init`, `navigator`, `reconcile`, `refit`, `tool`,
-`who`, and `why` have no one-letter alias.
+`brief`, `charter`, `contribute`, `doctor`, `init`, `navigator`, `reconcile`,
+`refit`, `tool`, `who`, and `why` have no one-letter alias.
 
 ## Examples
 
@@ -36,6 +36,7 @@ commands.
 /mauro init
 /mauro brief "change token rotation" --json
 /mauro reconcile --json
+/mauro contribute "Reconciliation needs a read-only preview."
 /mauro c
 /mauro docs review
 /mauro m find authentication
@@ -69,7 +70,7 @@ authorization.
 ## Ambient operations
 
 ```text
-mauro reconcile [--force] [--json]
+mauro reconcile [--force] [--dry-run] [--json]
 mauro brief "<objective>" [--json]
 ```
 
@@ -77,11 +78,49 @@ mauro brief "<objective>" [--json]
 signature, `HEAD`, the configured canonical ref, and its local commit with the
 previous reconciliation. It regenerates derived context when checkout evidence
 changed. A canonical-only change is reported without inspecting that branch.
-`--force` performs the refresh even without a detected change. `brief` is
-read-only. It returns the likely paths,
-responsible and reviewing Navigators, Charter, applicable knowledge,
-dependencies, document state, active Voyage conflicts, and verification.
+`--force` performs the refresh even without a detected change. `--dry-run`
+reports the paths, triggers, migration work, and canonical movement that would
+be handled, but changes no repository file or reconciliation metadata.
+`brief` is read-only. It ranks normalized exact terms across capability
+identities, purposes, evidence, and paths. It returns at most three responsible
+capabilities and two explicit reviewing Navigators. Likely paths use the best
+matching primary paths instead of every path owned by a selected capability.
+The result includes the Charter, applicable knowledge and Instruction
+Contracts, dependencies, active Voyage conflicts, up to eight supporting
+documents, and up to eight proposed verification commands. Applicable
+Instruction Contracts are not dropped to meet a context-size cap.
+Every Brief includes the mandatory pre-response gate that the host must run
+after semantic verification and immediately before it answers.
+For npm workspaces, redundant script commands are removed when the current
+package manifest proves that another selected script invokes them. For
+example, separate `type-check` and `lint` commands are omitted when `test`
+already runs both.
 Neither command edits product code or starts a Voyage.
+
+## Contribute to Mauro
+
+```text
+/mauro contribute "<idea>"
+/mauro contribute list [--status candidate|dismissed|submitted]
+/mauro contribute show <MI-0001>
+/mauro contribute preview <MI-0001> --as <suggestion|pr>
+/mauro contribute dismiss <MI-0001> --reason "<reason>"
+/mauro contribute doctor [--clear-stale-lock]
+```
+
+The ambient skill can also detect a Mauro limitation and offer to prepare it
+as a GitHub suggestion or a code pull request. Candidates live in private user
+state, not the target repository. Repeated observations use one stable
+candidate. Only a newly created candidate prompts the user.
+
+`preview` is local and shows the exact proposed title and body. Creating an
+issue, branch, commit, push, or pull request still needs explicit approval. A
+pull request is implemented in a Mauro source checkout, never in the installed
+runtime. See `skills/mauro/references/contribute.md` for privacy and submission
+rules.
+
+`contribute doctor` reports the private candidate-log lock. It clears the lock
+only when a second check proves that its local owner process is gone.
 
 ## Voyages and concurrent sessions
 
@@ -137,8 +176,11 @@ prove that its recorded process is local and no longer exists. It refuses an
 active, remote, or unreadable lock.
 
 `doctor` also reports the runtime location, selected host profiles, both skill
-adapters, Claude-hook currency, and repository migration status. A missing
-adapter that the install stamp selected makes the command fail.
+adapters, Claude-hook currency, source revision and dirty-source state, and
+repository migration status. A missing adapter that the install stamp selected
+makes the command fail. A standalone runtime installed from uncommitted source
+has `install.dirty: true`; version and installer output label its revision
+`<commit>-dirty`.
 
 ## Toolbox
 

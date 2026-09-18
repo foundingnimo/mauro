@@ -1,8 +1,18 @@
 #!/usr/bin/env node
 
-import { runCli } from '../scripts/cli.mjs';
+import { assertSupportedNode } from '../scripts/lib/runtime.mjs';
 
-runCli(process.argv.slice(2)).catch((error) => {
+try {
+  assertSupportedNode();
+} catch (error) {
   console.error(`MAURO_ERROR: ${error.message}`);
   process.exitCode = 1;
-});
+}
+
+if (process.exitCode !== 1) {
+  const { runCli } = await import('../scripts/cli.mjs');
+  runCli(process.argv.slice(2)).catch((error) => {
+    console.error(`MAURO_ERROR: ${error.message}`);
+    process.exitCode = 1;
+  });
+}

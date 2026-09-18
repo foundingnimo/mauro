@@ -2,9 +2,27 @@ import { readFileSync } from "node:fs";
 import { checkRepository } from "./check.mjs";
 import { PATHS } from "./constants.mjs";
 import { repoPath } from "./fs.mjs";
-import { impact, pathMatches } from "./query.mjs";
+import { impact, lexicalTerms, pathMatches, rankCapabilityMatches } from "./query.mjs";
 import { navigatorIdentity } from "./render.mjs";
 import { listVoyages, voyagePathsOverlap } from "./voyages.mjs";
+
+export const PRE_RESPONSE_GATE = Object.freeze({
+  required: true,
+  run: "immediately-before-every-substantive-response",
+  decision_gate: {
+    triggers: ["the verified premise already holds", "two or more materially different interpretations remain"],
+    unless_user_requested: ["detailed evidence", "a contingent implementation plan"],
+    include: ["one concise verified conclusion", "one material freshness caveat when needed", "exactly one focused decision question"],
+    exclude: ["ownership or specialist lists", "path inventories", "risks", "verification checks", "speculative implementation", "routine no-write bookkeeping"],
+    maximum_questions: 1
+  },
+  always: [
+    "answer the current request before adjacent findings",
+    "omit routine command and write-status narration",
+    "remove content that does not change the answer or immediate decision",
+    "check whether verified friction is a Mauro improvement candidate"
+  ]
+});
 
 function overlaps(left, right) {
   try { return voyagePathsOverlap(left, right); } catch { return false; }
@@ -25,18 +43,169 @@ function instructionApplies(contract, paths) {
   return paths.some((path) => overlaps(path, scoped));
 }
 
+function reviewTarget(state, review) {
+  if (state.manifest.navigators?.[review.navigator]) {
+    const capability = state.map.capabilities.find((candidate) => navigatorIdentity(candidate) === review.navigator);
+    return { id: review.navigator, capability };
+  }
+  const capability = state.map.capabilities.find((candidate) => candidate.id === review.navigator || candidate.name === review.navigator);
+  return capability ? { id: navigatorIdentity(capability), capability } : null;
+}
+
+function selectReviewers(state, capabilities, responsibleIds, ranked, objective) {
+  const rankById = new Map(ranked.map((item) => [item.capability.id, item]));
+  const objectiveTerms = new Set(lexicalTerms(objective, { removeStopWords: true }));
+  const candidates = new Map();
+  for (const review of capabilities.flatMap((capability) => capability.review || [])) {
+    const target = reviewTarget(state, review);
+    if (!target || responsibleIds.has(target.id)) continue;
+    const match = target.capability ? rankById.get(target.capability.id) : null;
+    const reasonTerms = lexicalTerms(review.reason || "", { removeStopWords: true })
+      .filter((term) => objectiveTerms.has(term));
+    const matchedTerms = [...new Set([...(match?.matched_terms || []), ...reasonTerms])];
+    const existing = candidates.get(target.id);
+    const item = {
+      id: target.id,
+      score: (match?.score || 0) + (reasonTerms.length * 3),
+      matched_terms: matchedTerms
+    };
+    if (!existing || item.score > existing.score) candidates.set(target.id, item);
+  }
+  const ordered = [...candidates.values()].sort((left, right) => right.score - left.score || left.id.localeCompare(right.id));
+  const matched = ordered.filter((item) => item.matched_terms.length >= 2);
+  return (matched.length ? matched : ordered.length === 1 ? ordered : []).slice(0, 2).map((item) => item.id);
+}
+
+function shellTokens(command) {
+  return (String(command).match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s]+/g) || [])
+    .map((token) => token.replace(/^(["'])(.*)\1$/, "$2"));
+}
+
+function npmVerification(command) {
+  const tokens = shellTokens(command);
+  const npmIndex = tokens.indexOf("npm");
+  if (npmIndex < 0 || tokens.slice(0, npmIndex).some((token) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token))) return null;
+  const args = tokens.slice(npmIndex + 1);
+  let workspace = null;
+  const positional = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === "--workspace" || token === "-w") {
+      workspace = args[index + 1] || null;
+      index += 1;
+    } else if (token.startsWith("--workspace=")) {
+      workspace = token.slice("--workspace=".length);
+    } else if (!token.startsWith("-")) {
+      positional.push(token);
+    }
+  }
+  const script = ["run", "run-script"].includes(positional[0])
+    ? positional[1]
+    : ["test", "start", "stop", "restart"].includes(positional[0]) ? positional[0] : null;
+  return script ? { script, workspace } : null;
+}
+
+function packageManifest(root, state, workspace) {
+  const direct = workspace ? `${workspace.replace(/^\.\//, "").replace(/\/$/, "")}/package.json` : "package.json";
+  const candidates = [direct];
+  if (workspace) {
+    for (const unit of state.map.units || []) {
+      if (unit.name === workspace || unit.root === workspace) candidates.push(...(unit.manifests || []), unit.manifest);
+    }
+  }
+  for (const candidate of [...new Set(candidates.filter((item) => item?.endsWith("package.json")))]) {
+    try {
+      const manifest = JSON.parse(readFileSync(repoPath(root, candidate), "utf8"));
+      if (!workspace || candidate === direct || manifest.name === workspace) return { path: candidate, scripts: manifest.scripts || {} };
+    } catch {}
+  }
+  return null;
+}
+
+function invokedNpmScripts(script) {
+  return [...String(script).matchAll(/\bnpm\s+(?:(?:run|run-script)\s+)?([A-Za-z0-9:_-]+)/g)]
+    .map((match) => match[1]);
+}
+
+function scriptInvokes(scripts, parent, child, seen = new Set()) {
+  if (parent === child || seen.has(parent)) return parent === child;
+  seen.add(parent);
+  return invokedNpmScripts(scripts[parent] || "")
+    .some((script) => script === child || scriptInvokes(scripts, script, child, seen));
+}
+
+function verificationSubsumes(root, state, parentCommand, childCommand) {
+  const parent = npmVerification(parentCommand);
+  const child = npmVerification(childCommand);
+  if (!parent || !child || parent.script === child.script) return false;
+  const parentManifest = packageManifest(root, state, parent.workspace);
+  const childManifest = packageManifest(root, state, child.workspace);
+  if (!parentManifest || !childManifest || parentManifest.path !== childManifest.path) return false;
+  return scriptInvokes(parentManifest.scripts, parent.script, child.script);
+}
+
+function deduplicateVerification(root, state, commands) {
+  const unique = [...new Set(commands)];
+  return unique.filter((command, index) => !unique.some((candidate, candidateIndex) => {
+    if (candidateIndex === index || !verificationSubsumes(root, state, candidate, command)) return false;
+    return !verificationSubsumes(root, state, command, candidate) || candidateIndex < index;
+  }));
+}
+
+function selectVerification(root, state, capabilities, matchByCapability, objective) {
+  const objectiveTerms = new Set(lexicalTerms(objective, { removeStopWords: true }));
+  const selected = [];
+  for (const capability of capabilities) {
+    const match = matchByCapability.get(capability.id);
+    const pathTerms = lexicalTerms((match?.matched_paths || []).join(" "));
+    const targetTerms = new Set([...objectiveTerms, ...pathTerms]);
+    const commands = capability.verification || [];
+    const ranked = commands.map((command, index) => ({
+      command,
+      index,
+      score: lexicalTerms(command).filter((term) => targetTerms.has(term)).length
+    })).sort((left, right) => right.score - left.score || left.index - right.index);
+    const capabilitySelection = [];
+    if (ranked[0]?.score > 0) capabilitySelection.push(ranked[0].command);
+    for (const command of commands) {
+      if (capabilitySelection.length >= 3) break;
+      if (!capabilitySelection.includes(command)) capabilitySelection.push(command);
+    }
+    selected.push(...capabilitySelection);
+  }
+  return deduplicateVerification(root, state, selected).slice(0, 8);
+}
+
+function selectDocuments(entries, objective, limit = 8) {
+  const objectiveTerms = new Set(lexicalTerms(objective, { removeStopWords: true }));
+  const criticalityWeight = { binding: 5, operational: 2, informational: 0 };
+  const statusWeight = { stale: 3, suspect: 2, current: 0, historical: 0 };
+  return entries.map((entry, index) => {
+    const [id, document] = entry;
+    const lexicalScore = lexicalTerms(`${id} ${document.path}`).filter((term) => objectiveTerms.has(term)).length * 5;
+    return {
+      entry,
+      index,
+      score: lexicalScore + (criticalityWeight[document.criticality] || 0) + (statusWeight[document.status] || 0)
+    };
+  }).sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, limit)
+    .map((item) => item.entry);
+}
+
 export function buildBrief(root, objective) {
   const report = checkRepository(root);
   const state = report.state;
   const predicted = impact(root, objective);
   const capabilities = predicted.capabilities;
-  const paths = [...new Set(capabilities.flatMap((capability) => capability.primary_paths || []))].sort();
+  const matchByCapability = new Map((predicted.matches || []).map((match) => [match.capability, match]));
+  const paths = [...new Set(capabilities.flatMap((capability) => {
+    const matched = matchByCapability.get(capability.id)?.matched_paths || [];
+    return matched.length ? matched : capability.primary_paths || [];
+  }))].sort();
   const responsibleIds = new Set(predicted.navigators);
-  const reviewingIds = new Set(capabilities.flatMap((capability) => capability.review || []).map((review) => {
-    if (state.manifest.navigators?.[review.navigator]) return review.navigator;
-    const reviewedCapability = state.map.capabilities.find((candidate) => candidate.id === review.navigator || candidate.name === review.navigator);
-    return reviewedCapability ? navigatorIdentity(reviewedCapability) : review.navigator;
-  }).filter((id) => state.manifest.navigators?.[id]));
+  const ranked = rankCapabilityMatches(state, objective);
+  const reviewingIds = new Set(selectReviewers(state, capabilities, responsibleIds, ranked, objective));
   const navigatorIds = [...new Set([...responsibleIds, ...reviewingIds])].sort();
   const unitIds = capabilityUnits(state, capabilities);
   const dependencies = (state.map.dependencies || [])
@@ -44,9 +213,11 @@ export function buildBrief(root, objective) {
   const knowledge = Object.entries(state.manifest.knowledge || {})
     .filter(([, record]) => paths.some((path) => (record.paths || []).some((recordPath) => overlaps(path, recordPath))))
     .map(([id, record]) => ({ id, source: record.source, status: record.status, paths: record.paths || [] }));
-  const documents = Object.entries(state.manifest.documents || {})
+  const documentEntries = Object.entries(state.manifest.documents || {})
     .filter(([, document]) => document.kind !== "instruction-contract")
-    .filter(([, document]) => paths.some((path) => (document.watches || []).some((watch) => overlaps(path, watch))))
+    .filter(([id, document]) => !id.startsWith("navigator-") && !document.path.startsWith("docs/mauro/"))
+    .filter(([, document]) => paths.some((path) => (document.watches || []).some((watch) => overlaps(path, watch))));
+  const documents = selectDocuments(documentEntries, objective)
     .map(([id, document]) => ({
       id,
       path: document.path,
@@ -71,7 +242,7 @@ export function buildBrief(root, objective) {
   const conflicts = activeVoyages
     .filter((voyage) => paths.some((path) => voyage.leased_paths.some((lease) => overlaps(path, lease))))
     .map((voyage) => ({ id: voyage.id, objective: voyage.objective, leased_paths: voyage.leased_paths }));
-  const verification = [...new Set(capabilities.flatMap((capability) => capability.verification || []))];
+  const verification = selectVerification(root, state, capabilities, matchByCapability, objective);
   const decisions = [];
   const canonicalFinding = report.findings.find((finding) => finding.code.startsWith("canonical-") && finding.level === "error");
   if (canonicalFinding) decisions.push(canonicalFinding.message);
@@ -108,7 +279,8 @@ export function buildBrief(root, objective) {
       confidence: capability.confidence,
       approved: capability.approved === true,
       primary_paths: capability.primary_paths,
-      evidence: capability.evidence
+      evidence: capability.evidence,
+      selection: matchByCapability.get(capability.id) || null
     })),
     navigators: navigatorIds.map((id) => ({
       id,
@@ -122,7 +294,8 @@ export function buildBrief(root, objective) {
     verification,
     active_voyage_conflicts: conflicts,
     required_human_decisions: decisions,
-    note: "Impact selection is lexical. A Navigator must verify semantic scope before implementation."
+    pre_response_gate: PRE_RESPONSE_GATE,
+    note: "Impact selection uses ranked lexical evidence and bounded review expansion. A Navigator must verify semantic scope before implementation."
   };
 }
 
@@ -159,6 +332,8 @@ export function renderBrief(brief) {
     "",
     "Required decisions:",
     ...lines(brief.required_human_decisions, (decision) => decision),
+    "",
+    "Pre-response gate: required. If the premise already holds or the request is materially ambiguous, return only a concise verified conclusion, a material freshness caveat when needed, and one focused decision question. Omit ownership, path inventories, risks, checks, speculative implementation, and routine bookkeeping.",
     "",
     brief.note
   ];

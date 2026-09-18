@@ -14,6 +14,15 @@ $MauroLegacyRuntimeDir = Join-Path $MauroClaudeDir "mauro"
 $MauroClaudeSkillsDir = Join-Path $MauroClaudeDir "skills"
 $MauroSharedSkillsDir = if ($env:AGENT_SKILLS_DIR) { $env:AGENT_SKILLS_DIR } else { Join-Path $HOME ".agents\skills" }
 
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  throw "Mauro requires Node.js 22 or newer; node was not found."
+}
+$NodeVersion = (& node -p "process.versions.node").Trim()
+$NodeMajor = [int]($NodeVersion.Split('.')[0])
+if ($NodeMajor -lt 22) {
+  throw "Mauro requires Node.js 22 or newer; found v$NodeVersion."
+}
+
 $MauroRuntimeDir = [IO.Path]::GetFullPath($MauroRuntimeDir)
 $MauroClaudeDir = [IO.Path]::GetFullPath($MauroClaudeDir)
 $MauroSharedSkillsDir = [IO.Path]::GetFullPath($MauroSharedSkillsDir)
@@ -44,9 +53,21 @@ function Get-MauroCommit($Dir) {
   try { $c = & git -C $Dir rev-parse --short HEAD 2>$null; if ($LASTEXITCODE -eq 0) { return $c } } catch {}
   return "no commit"
 }
+function Get-MauroDirty($Dir) {
+  try {
+    $Status = & git -C $Dir status --porcelain --untracked-files=normal 2>$null
+    return $LASTEXITCODE -eq 0 -and [bool]$Status
+  } catch { return $false }
+}
+function Format-MauroRevision($Commit, $Dirty) {
+  if ($Dirty) { return "${Commit}-dirty" }
+  return $Commit
+}
 
 $SourceVersion = Get-MauroVersion $MauroSourceDir
 $SourceCommit = Get-MauroCommit $MauroSourceDir
+$SourceDirty = Get-MauroDirty $MauroSourceDir
+$SourceRevision = Format-MauroRevision $SourceCommit $SourceDirty
 $CurrentRuntime = if (Test-Path $MauroRuntimeDir) { $MauroRuntimeDir } elseif (Test-Path $MauroLegacyRuntimeDir) { $MauroLegacyRuntimeDir } else { $MauroRuntimeDir }
 $Installed = (Test-Path $MauroRuntimeDir) -or (Test-Path $MauroLegacyRuntimeDir) `
   -or (Test-Path (Join-Path $MauroClaudeSkillsDir "mauro")) -or (Test-Path (Join-Path $MauroClaudeSkillsDir "mauro-context")) `
@@ -55,9 +76,15 @@ $Installed = (Test-Path $MauroRuntimeDir) -or (Test-Path $MauroLegacyRuntimeDir)
 if ($Installed) {
   $InstalledVersion = Get-MauroVersion $CurrentRuntime
   $InstalledCommit = "unknown commit"
-  try { $InstalledCommit = (Get-Content (Join-Path $CurrentRuntime ".install.json") -Raw | ConvertFrom-Json).commit } catch {}
-  Write-Host "Mauro $InstalledVersion ($InstalledCommit) is installed in $CurrentRuntime."
-  Write-Host "This checkout is $SourceVersion ($SourceCommit)."
+  $InstalledDirty = $false
+  try {
+    $InstalledStamp = Get-Content (Join-Path $CurrentRuntime ".install.json") -Raw | ConvertFrom-Json
+    $InstalledCommit = $InstalledStamp.commit
+    $InstalledDirty = $InstalledStamp.dirty -eq $true
+  } catch {}
+  $InstalledRevision = Format-MauroRevision $InstalledCommit $InstalledDirty
+  Write-Host "Mauro $InstalledVersion ($InstalledRevision) is installed in $CurrentRuntime."
+  Write-Host "This checkout is $SourceVersion ($SourceRevision)."
   if (-not $Update) {
     if ($Yes) {
       $Update = $true
@@ -82,7 +109,7 @@ Copy-Item -Path (Join-Path $MauroSourceDir "package.json") -Destination $StageDi
 Copy-Item -Path (Join-Path $MauroSourceDir "LICENSE") -Destination $StageDir
 $Hosts = if ($TargetHost -eq "all") { @("claude", "shared") } else { @($TargetHost) }
 $InstallHooks = -not $NoHooks -and ($TargetHost -eq "claude" -or $TargetHost -eq "all")
-@{ version = $SourceVersion; commit = $SourceCommit; source = $MauroSourceDir; runtime = $MauroRuntimeDir; hosts = $Hosts; hooks = $InstallHooks; installed_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") } |
+@{ version = $SourceVersion; commit = $SourceCommit; dirty = $SourceDirty; source = $MauroSourceDir; runtime = $MauroRuntimeDir; hosts = $Hosts; hooks = $InstallHooks; installed_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") } |
   ConvertTo-Json | Set-Content (Join-Path $StageDir ".install.json")
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $MauroRuntimeDir) | Out-Null
@@ -119,8 +146,8 @@ if (-not $NoHooks -and ($TargetHost -eq "claude" -or $TargetHost -eq "all")) {
 }
 
 if ($Update) {
-  Write-Host "Updated Mauro to $SourceVersion ($SourceCommit) for $TargetHost. Restart open coding-agent sessions."
+  Write-Host "Updated Mauro to $SourceVersion ($SourceRevision) for $TargetHost. Restart open coding-agent sessions."
 } else {
-  Write-Host "Installed Mauro $SourceVersion ($SourceCommit) for $TargetHost. Restart open coding-agent sessions."
+  Write-Host "Installed Mauro $SourceVersion ($SourceRevision) for $TargetHost. Restart open coding-agent sessions."
 }
 if ($NoHooks -and ($TargetHost -eq "claude" -or $TargetHost -eq "all")) { Write-Host "Claude hooks were not installed. Mauro remains available on demand." }

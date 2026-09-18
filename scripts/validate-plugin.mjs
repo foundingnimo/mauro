@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_GENERATED_PATTERNS } from "./lib/constants.mjs";
 import { validateConfig } from "./lib/policy.mjs";
@@ -25,13 +25,17 @@ function readJson(path) {
 const required = [
   ".npmignore",
   ".claude-plugin/plugin.json",
+  ".github/pull_request_template.md",
+  "CONTRIBUTING.md",
   "skills/mauro/SKILL.md",
+  "skills/mauro/references/contribute.md",
   "skills/mauro/agents/openai.yaml",
   "skills/mauro-context/SKILL.md",
   "hooks/hooks.json",
   "bin/mauro",
   "scripts/lib/toolbox.mjs",
   "scripts/lib/tool-gaps.mjs",
+  "scripts/lib/contributions.mjs",
   "scripts/lib/lock.mjs",
   "scripts/lib/voyages.mjs",
   "scripts/lib/brief.mjs",
@@ -41,6 +45,7 @@ const required = [
   "schemas/manifest.schema.json",
   "schemas/fingerprints.schema.json",
   "schemas/tool-gaps.schema.json",
+  "schemas/contributions.schema.json",
   "schemas/voyage.schema.json",
   "schemas/survey-report.schema.json",
   "schemas/config.schema.json"
@@ -61,7 +66,7 @@ for (const event of ["SessionStart", "PostToolUse", "Stop"]) {
   if (!Array.isArray(hooks?.hooks?.[event])) fail(`hooks/hooks.json: ${event} is missing.`);
 }
 
-for (const path of ["schemas/map.schema.json", "schemas/manifest.schema.json", "schemas/fingerprints.schema.json", "schemas/tool-gaps.schema.json", "schemas/voyage.schema.json", "schemas/survey-report.schema.json", "schemas/config.schema.json"]) {
+for (const path of ["schemas/map.schema.json", "schemas/manifest.schema.json", "schemas/fingerprints.schema.json", "schemas/tool-gaps.schema.json", "schemas/contributions.schema.json", "schemas/voyage.schema.json", "schemas/survey-report.schema.json", "schemas/config.schema.json"]) {
   const schema = readJson(path);
   if (schema && schema.$schema !== "https://json-schema.org/draft/2020-12/schema") fail(`${path}: wrong JSON Schema version.`);
 }
@@ -103,6 +108,65 @@ function validateSkill(directory, { explicit }) {
 }
 validateSkill("mauro", { explicit: true });
 validateSkill("mauro-context", { explicit: false });
+
+function markdownFiles(directory) {
+  const absolute = join(root, directory);
+  if (!existsSync(absolute)) return [];
+  return readdirSync(absolute, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? markdownFiles(path) : entry.isFile() && entry.name.endsWith(".md") ? [path] : [];
+  });
+}
+
+function headingAnchors(text) {
+  const counts = new Map();
+  const anchors = new Set();
+  for (const match of text.matchAll(/^#{1,6}\s+(.+?)\s*#*$/gm)) {
+    const base = match[1].trim().toLowerCase()
+      .replace(/[`*_~]/g, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/[^\p{L}\p{N}\s-]/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const count = counts.get(base) || 0;
+    counts.set(base, count + 1);
+    anchors.add(count ? `${base}-${count}` : base);
+  }
+  return anchors;
+}
+
+const markdownPaths = [
+  "README.md",
+  "CONTRIBUTING.md",
+  "CHANGELOG.md",
+  "backlog.md",
+  ...markdownFiles("docs"),
+  ...markdownFiles("skills"),
+  ...markdownFiles("agents"),
+  ...markdownFiles(".github")
+].filter((path, index, paths) => paths.indexOf(path) === index && existsSync(join(root, path)));
+
+for (const source of markdownPaths) {
+  const text = readFileSync(join(root, source), "utf8");
+  for (const match of text.matchAll(/!?\[[^\]]*\]\(([^)]+)\)/g)) {
+    const rawTarget = match[1].trim().replace(/^<|>$/g, "");
+    if (!rawTarget || /^(?:https?:|mailto:)/i.test(rawTarget)) continue;
+    const [rawPath, rawAnchor = ""] = rawTarget.split("#", 2);
+    const targetPath = rawPath ? resolve(dirname(join(root, source)), decodeURIComponent(rawPath)) : join(root, source);
+    const targetLabel = relative(root, targetPath) || source;
+    if (!existsSync(targetPath)) {
+      fail(`${source}: broken Markdown link ${rawTarget}.`);
+      continue;
+    }
+    if (rawAnchor && targetPath.endsWith(".md")) {
+      const anchor = decodeURIComponent(rawAnchor).toLowerCase();
+      if (!headingAnchors(readFileSync(targetPath, "utf8")).has(anchor)) {
+        fail(`${source}: missing Markdown anchor #${rawAnchor} in ${targetLabel}.`);
+      }
+    }
+  }
+}
 
 const openAiMetadata = join(root, "skills/mauro/agents/openai.yaml");
 if (existsSync(openAiMetadata)) {

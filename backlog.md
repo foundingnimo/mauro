@@ -18,8 +18,14 @@ Status values:
   restrictions.
 - [ ] Verify that a clean Expedition cannot reuse old generated Navigator names.
 - [ ] Remove duplicated decision blocks from host-rendered command responses.
-- [ ] Re-run the large-monorepo Map gate with validated reports and compare its
+- [x] Re-run the large-monorepo Map gate with validated reports and compare its
   capability boundaries with the rejected draft.
+- [ ] Keep preliminary Navigators isolated from host discovery until a person
+  approves and publishes their capability boundaries.
+- [ ] Prevent mapper shell commands from writing repository files, or detect
+  and reject every write before synthesis.
+- [ ] Add a resumable Expedition checkpoint after validated surveys so an
+  interrupted gate does not repeat the expensive scan.
 
 ### Consistent multi-session reads
 
@@ -89,6 +95,34 @@ state or performing overlapping work by accident.
 - [ ] Preserve the existing cross-Voyage promotion threshold; one Expedition
   must not promote its own reported gaps.
 
+### Shared findings and community voting
+
+Goal: Let people share selected Mauro findings so other Mauro installations
+can discover existing suggestions, add independent evidence, and vote on what
+should be improved or built next.
+
+- [ ] Define one shareable proposal envelope for repository findings, Mauro
+  improvement candidates, and Toolbox Tool Gap requests.
+- [ ] Make publication opt-in for each repository and each proposal. Never
+  upload a local finding, vote, or evidence without explicit authorization.
+- [ ] Remove repository names, private origins, absolute paths, tickets, code,
+  logs, credentials, secrets, customer data, and other identifying evidence
+  before publication.
+- [ ] Let a Mauro installation query relevant published proposals and show
+  existing suggestions before it creates a duplicate.
+- [ ] Deduplicate equivalent proposals with stable public keys while preserving
+  independent occurrence counts and version or host compatibility evidence.
+- [ ] Support useful votes such as `needed`, `seen-again`, `not-relevant`, and
+  `resolved`, with enough provenance to resist accidental vote inflation.
+- [ ] Let shared demand promote recurring Tool Gaps into candidate Toolbox
+  operations without installing or executing community code automatically.
+- [ ] Keep local findings authoritative until a person chooses to share, merge,
+  dismiss, withdraw, or mark a proposal resolved.
+- [ ] Define moderation, abuse reporting, proposal ownership, withdrawal,
+  retention, and deletion behavior before enabling public discovery.
+- [ ] Evaluate a GitHub-backed registry first, then a provider-neutral service
+  only if cross-host discovery and voting need more than GitHub can provide.
+
 ## Later
 
 ### Background service evaluation
@@ -120,6 +154,16 @@ state or performing overlapping work by accident.
 
 ## Completed
 
+### Focused task briefing
+
+- [x] Rank exact normalized capability evidence instead of loose substring
+  matches.
+- [x] Bound responsible capabilities and explicit review expansion.
+- [x] Narrow likely paths, supporting documents, and proposed verification to
+  the task while preserving all applicable Instruction Contracts.
+- [x] Add a large-monorepo regression based on the direct-debit application and
+  marketplace API dogfood task.
+
 ### Validated Expedition survey handoff
 
 - [x] Define one stable report contract for structure, capability,
@@ -145,6 +189,17 @@ state or performing overlapping work by accident.
 - [x] Move standalone runtime files to `~/.mauro`, add host profiles, and
   migrate the legacy Claude runtime.
 - [x] Add adapter and repository-migration health to `mauro doctor`.
+
+### Upstream contribution loop
+
+- [x] Keep Mauro improvement candidates in private user state outside target
+  repositories and the installed runtime.
+- [x] Detect and deduplicate verified Mauro limitations during ambient work.
+- [x] Prepare sanitized GitHub suggestion and code pull-request previews.
+- [x] Require explicit approval before any issue, branch, commit, push, or pull
+  request is created.
+- [x] Add a read-only reconciliation preview for explicit no-write requests.
+- [x] Put a mandatory pre-response gate in every Brief and the ambient skill.
 
 ### Multi-session ownership foundation
 

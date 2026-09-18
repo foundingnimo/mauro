@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -125,6 +125,59 @@ test("install.sh --update replaces runtime and skills while safely refreshing ho
       const commands = refreshed.hooks[event].flatMap((group) => group.hooks.map((hook) => hook.command));
       assert.equal(commands.filter((command) => command.includes(`${runtime}/bin/mauro`)).length, 1);
     }
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("install.sh identifies a runtime copied from a dirty source checkout", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "mauro-dirty-install-"));
+  try {
+    const source = join(sandbox, "source");
+    cpSync(packageRoot, source, {
+      recursive: true,
+      filter(path) {
+        const relative = path === packageRoot ? "" : path.slice(packageRoot.length + 1);
+        return ![".git", "node_modules"].includes(relative.split("/")[0]);
+      }
+    });
+    const git = (...args) => spawnSync("git", args, { cwd: source, encoding: "utf8" });
+    assert.equal(git("init", "--quiet").status, 0);
+    assert.equal(git("add", "-A").status, 0);
+    assert.equal(git("-c", "user.name=Mauro Test", "-c", "user.email=mauro@test.local", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "fixture").status, 0);
+    const commit = git("rev-parse", "--short", "HEAD").stdout.trim();
+
+    const home = join(sandbox, "home");
+    const runtime = join(home, ".mauro");
+    const env = {
+      ...process.env,
+      HOME: home,
+      MAURO_HOME: runtime,
+      CLAUDE_CONFIG_DIR: join(home, ".claude"),
+      AGENT_SKILLS_DIR: join(home, ".agents/skills")
+    };
+    const cleanInstall = spawnSync("sh", [join(source, "install.sh"), "--no-hooks"], { encoding: "utf8", env });
+    assert.equal(cleanInstall.status, 0, cleanInstall.stdout + cleanInstall.stderr);
+    const cleanStamp = JSON.parse(readFileSync(join(runtime, ".install.json"), "utf8"));
+    assert.equal(cleanStamp.commit, commit);
+    assert.equal(cleanStamp.dirty, false);
+    assert.doesNotMatch(cleanInstall.stdout, new RegExp(`${commit}-dirty`));
+
+    const readme = join(source, "README.md");
+    writeFileSync(readme, `${readFileSync(readme, "utf8")}\nDirty development edit.\n`);
+    const dirtyInstall = spawnSync("sh", [join(source, "install.sh"), "--update", "--no-hooks"], { encoding: "utf8", env });
+    assert.equal(dirtyInstall.status, 0, dirtyInstall.stdout + dirtyInstall.stderr);
+    assert.match(dirtyInstall.stdout, new RegExp(`${commit}-dirty`));
+    const dirtyStamp = JSON.parse(readFileSync(join(runtime, ".install.json"), "utf8"));
+    assert.equal(dirtyStamp.commit, commit);
+    assert.equal(dirtyStamp.dirty, true);
+
+    const version = spawnSync(process.execPath, [join(runtime, "bin/mauro"), "--version"], { encoding: "utf8" });
+    assert.equal(version.status, 0, version.stderr);
+    assert.match(version.stdout, new RegExp(`\\(${commit}-dirty, installed`));
+    const doctor = spawnSync(process.execPath, [join(runtime, "bin/mauro"), "doctor", "--root", home, "--json"], { encoding: "utf8", env });
+    assert.equal(doctor.status, 0, doctor.stderr);
+    assert.equal(JSON.parse(doctor.stdout).install.dirty, true);
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }

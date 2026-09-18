@@ -29,7 +29,8 @@ Parse the first `$ARGUMENTS` token with this exact table:
 | `w` | `where` |
 
 Do not infer prefixes. Commands without aliases are `brief`, `charter`,
-`doctor`, `init`, `navigator`, `reconcile`, `refit`, `tool`, `who`, and `why`.
+`contribute`, `doctor`, `init`, `navigator`, `reconcile`, `refit`, `tool`,
+`who`, and `why`.
 Show help when no command or an unknown command is present. Read
 [references/commands.md](references/commands.md) for exact routing.
 
@@ -58,6 +59,7 @@ Read the workflow reference that matches the command:
 - `tool`: [references/toolbox.md](references/toolbox.md)
 - `check`, `docs`, `map update`: [references/maintenance.md](references/maintenance.md)
 - `pr`: [references/pr-context.md](references/pr-context.md)
+- `contribute`: [references/contribute.md](references/contribute.md)
 - `refit`: [references/refit.md](references/refit.md)
 
 Use ASD-STE100 Simplified Technical English for Mauro artifacts. Report the

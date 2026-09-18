@@ -38,7 +38,11 @@ Read only the reference needed for the current work:
 - Freshness or document review: [Maintenance](../mauro/references/maintenance.md)
 - Repository restructuring: [Refit](../mauro/references/refit.md)
 - Reusable operations: [Toolbox](../mauro/references/toolbox.md)
+- Mauro improvement candidates: [Contribution](../mauro/references/contribute.md)
 
 Use deterministic Mauro operations for inventory, lookup, validation, and
 rendering. Use semantic agents or separate evidence passes for classification
 and review. Report only information that affects the task or needs a decision.
+Before every substantive answer, run the mandatory pre-response gate in the
+ambient workflow. Do not send the answer until every applicable gate item
+passes.

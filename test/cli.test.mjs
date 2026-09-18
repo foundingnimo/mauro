@@ -797,6 +797,11 @@ test("queries resolve aliases and path ownership", () => {
   const owner = run("who", "packages/auth/src/token.ts", "--root", sandbox, "--json");
   assert.equal(owner.status, 0, owner.stderr);
   assert.match(owner.stdout, /auth-navigator/);
+  const affected = run("impact", "change auth token handling", "--root", sandbox, "--json");
+  assert.equal(affected.status, 0, affected.stderr);
+  const impact = JSON.parse(affected.stdout);
+  assert.equal(typeof impact.capabilities[0].score, "number");
+  assert.equal(impact.matches[0].capability, impact.capabilities[0].id);
 });
 
 test("Bearing check reports an unresolved inline pointer", () => {
@@ -955,8 +960,147 @@ test("brief returns compact task context without creating a Voyage", () => {
   assert.ok(brief.capabilities.some((capability) => capability.name.includes("auth")));
   assert.ok(brief.navigators.some((navigator) => navigator.generated_skill?.startsWith(".agents/skills/")));
   assert.equal(brief.charter.path, "docs/mauro/charter.md");
+  assert.equal(brief.pre_response_gate.required, true);
+  assert.equal(brief.pre_response_gate.decision_gate.maximum_questions, 1);
+  assert.ok(brief.pre_response_gate.decision_gate.exclude.includes("ownership or specialist lists"));
+  assert.ok(brief.pre_response_gate.decision_gate.exclude.includes("routine no-write bookkeeping"));
   assert.match(brief.note, /lexical/i);
   assert.equal(existsSync(join(sandbox, ".mauro/voyages/V-0001.json")), false);
+});
+
+test("brief ranks a direct-debit marketplace task without loading the whole Map", () => {
+  mkdirSync(join(sandbox, "packages/health-web-service"), { recursive: true });
+  writeFileSync(join(sandbox, "packages/health-web-service/package.json"), `${JSON.stringify({
+    name: "@example/health-web-service",
+    scripts: {
+      test: "npm run type-check && npm run lint && vitest run",
+      "type-check": "tsc --noEmit",
+      lint: "eslint .",
+      build: "tsc -p tsconfig.build.json"
+    }
+  }, null, 2)}\n`);
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  const mapPath = join(sandbox, ".mauro/map.json");
+  const map = readMap();
+  map.capabilities = [
+    {
+      id: "cap-marketplace-web-application",
+      name: "Marketplace Web Application",
+      purpose: "Serve the marketplace SPA and the apps that mount inside it.",
+      primary_paths: ["apps/web/**", "packages/ezidebit/apps/direct-debit/**"],
+      secondary_paths: [],
+      units: [],
+      evidence: ["packages/ezidebit/apps/direct-debit/src/index.ts"],
+      review: [{ navigator: "cap-marketplace-backend-service", reason: "The app calls the marketplace API." }],
+      verification: [
+        "npm run build --workspace @example/health-web",
+        "npm run test --workspace @example/health-web",
+        "npm run lint --workspace @example/health-web",
+        "npm test --workspace @example/ezidebit-app-direct-debit",
+        "node --test bin/new-web-app.spec.js"
+      ],
+      confidence: 0.9,
+      provenance: "human-approved",
+      approved: true
+    },
+    {
+      id: "cap-marketplace-backend-service",
+      name: "Marketplace Backend Service",
+      purpose: "Serve the marketplace API, including the server routes for installed apps.",
+      primary_paths: ["packages/health-web-service/**"],
+      secondary_paths: [],
+      units: [],
+      evidence: ["packages/health-web-service/src/routes/api/mini-apps/direct-debit.ts"],
+      review: [
+        { navigator: "cap-marketplace-web-application", reason: "The marketplace SPA consumes this API." },
+        { navigator: "cap-unified-api-service", reason: "The backend calls the unified API." },
+        { navigator: "cap-financial-and-payment-integrations", reason: "Direct-debit routes use the payment connector." }
+      ],
+      verification: [
+        "npm run test --workspace packages/health-web-service",
+        "npm run type-check --workspace packages/health-web-service",
+        "npm run lint --workspace packages/health-web-service",
+        "npm run build --workspace packages/health-web-service"
+      ],
+      confidence: 0.9,
+      provenance: "human-approved",
+      approved: true
+    },
+    {
+      id: "cap-financial-and-payment-integrations",
+      name: "Financial and Payment Integrations",
+      purpose: "Provide direct-debit payment clients used by routines and the marketplace backend.",
+      primary_paths: ["packages/ezidebit/src/**"],
+      secondary_paths: [],
+      units: [],
+      evidence: ["packages/ezidebit/package.json"],
+      review: [],
+      verification: ["npm test --workspace packages/ezidebit"],
+      confidence: 0.8,
+      provenance: "human-approved",
+      approved: true
+    },
+    {
+      id: "cap-unified-api-service",
+      name: "Unified API Service",
+      purpose: "Serve one HTTP API over every practice-management target.",
+      primary_paths: ["packages/health-service/**"],
+      secondary_paths: [],
+      units: [],
+      evidence: ["packages/health-service/package.json"],
+      review: [],
+      verification: ["npm test --workspace packages/health-service"],
+      confidence: 0.8,
+      provenance: "human-approved",
+      approved: true
+    },
+    {
+      id: "cap-monorepo-build-and-release-tooling",
+      name: "Monorepo Build and Release Tooling",
+      purpose: "Run repository builds and release workflows.",
+      primary_paths: ["bin/**", ".github/workflows/**"],
+      secondary_paths: [],
+      units: [],
+      evidence: ["package.json"],
+      review: [],
+      verification: ["npm test"],
+      confidence: 0.8,
+      provenance: "human-approved",
+      approved: true
+    }
+  ];
+  writeFileSync(mapPath, `${JSON.stringify(map, null, 2)}\n`);
+  const regenerated = run("navigator", "regenerate", "all", "--root", sandbox);
+  assert.equal(regenerated.status, 0, regenerated.stderr);
+
+  const objective = "change the direct-debit app so that its settings are backed by the marketplace API";
+  const result = run("brief", objective, "--root", sandbox, "--json");
+  assert.equal(result.status, 0, result.stderr);
+  const brief = JSON.parse(result.stdout);
+
+  assert.deepEqual(brief.capabilities.map((capability) => capability.id).sort(), [
+    "cap-marketplace-backend-service",
+    "cap-marketplace-web-application"
+  ]);
+  assert.deepEqual(brief.navigators.map((navigator) => [navigator.id, navigator.role]).sort(), [
+    ["mauro-financial-and-payment-integrations-navigator", "reviewing"],
+    ["mauro-marketplace-backend-service-navigator", "responsible"],
+    ["mauro-marketplace-web-application-navigator", "responsible"]
+  ]);
+  assert.deepEqual(brief.likely_paths, [
+    "packages/ezidebit/apps/direct-debit/**",
+    "packages/health-web-service/**"
+  ]);
+  assert.ok(brief.verification.length <= 6, brief.verification.join("\n"));
+  assert.ok(brief.verification.includes("npm test --workspace @example/ezidebit-app-direct-debit"));
+  assert.ok(brief.verification.includes("npm run test --workspace packages/health-web-service"));
+  assert.equal(brief.verification.includes("npm run type-check --workspace packages/health-web-service"), false);
+  assert.equal(brief.verification.includes("npm run lint --workspace packages/health-web-service"), false);
+  assert.equal(brief.verification.includes("node --test bin/new-web-app.spec.js"), false);
+  assert.equal(brief.verification.includes("npm test"), false);
+  assert.ok(brief.instruction_contracts.length <= 6);
+  assert.ok(brief.documents.length <= 8);
+  assert.match(brief.note, /ranked/i);
 });
 
 test("reconcile refreshes changed evidence once and clears the queue", () => {
@@ -994,6 +1138,31 @@ test("reconcile refreshes changed evidence once and clears the queue", () => {
   assert.match(sessionStart.stdout, /Repository context refreshed from 1 changed path\./);
   const afterSessionStart = readMap().files.find((file) => file.path === "packages/auth/src/token.ts").digest;
   assert.notEqual(afterSessionStart, after);
+});
+
+test("reconcile dry-run reports pending work without changing Mauro state", () => {
+  assert.equal(run("init", "--root", sandbox).status, 0);
+  const target = join(sandbox, "packages/auth/src/token.ts");
+  writeFileSync(target, "export const token = 'dry-run change';\n");
+  const before = Object.fromEntries([
+    ".mauro/map.json",
+    ".mauro/manifest.json",
+    ".mauro/fingerprints.json",
+    ".mauro/reconciliation.json",
+    ".mauro/changed-paths.json"
+  ].map((path) => [path, readFileSync(join(sandbox, path), "utf8")]));
+
+  const preview = JSON.parse(run("reconcile", "--dry-run", "--root", sandbox, "--json").stdout);
+  assert.equal(preview.dry_run, true);
+  assert.equal(preview.updated, false);
+  assert.equal(preview.would_update, true);
+  assert.ok(preview.paths.includes("packages/auth/src/token.ts"));
+  for (const [path, contents] of Object.entries(before)) {
+    assert.equal(readFileSync(join(sandbox, path), "utf8"), contents, `${path} changed during dry-run`);
+  }
+
+  const applied = JSON.parse(run("reconcile", "--root", sandbox, "--json").stdout);
+  assert.equal(applied.updated, true);
 });
 
 test("reconcile refreshes a clean working tree when HEAD changes", () => {

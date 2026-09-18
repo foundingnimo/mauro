@@ -448,54 +448,80 @@ export function updateMap(root) {
   return withProjectLock(root, "update Map and generated views", () => updateMapUnlocked(root));
 }
 
+function reconciliationPlan(root, observedPaths, force) {
+  const migration = repositoryMigrationStatus(root);
+  if (!migration.supported) {
+    throw new Error(`Repository context cannot be migrated automatically: ${migration.reasons.join(", ")}.`);
+  }
+  const queuePath = repoPath(root, PATHS.changes);
+  let queued = [];
+  try { queued = readJson(queuePath).paths || []; } catch {}
+  const state = loadState(root);
+  const observed = relevantChangedPaths(observedPaths);
+  const previous = readReconciliation(root);
+  const current = reconciliationState(root, state.config, observed);
+  const triggers = reconciliationReasons(previous, current);
+  const newlyObserved = triggers.includes("working-tree") ? observed : [];
+  const paths = relevantChangedPaths([...queued, ...newlyObserved]);
+  const contentTriggers = triggers.filter((reason) => ["reconciliation-metadata", "working-tree", "head-commit"].includes(reason));
+  const canonicalTriggers = triggers.filter((reason) => reason === "canonical-ref" || reason === "canonical-commit");
+  const wouldUpdate = Boolean(force || migration.required || paths.length || contentTriggers.length);
+  const checkoutUpdateRequired = ["behind", "diverged"].includes(current.canonical_relationship);
+  const reportedPaths = force || (paths.length === 0 && contentTriggers.length > 0) ? ["**"] : paths;
+  return { migration, current, triggers, paths, contentTriggers, canonicalTriggers, wouldUpdate, checkoutUpdateRequired, reportedPaths };
+}
+
+function unchangedReason(plan, recorded = false) {
+  if (!plan.canonicalTriggers.length) return "Repository evidence has not changed since the last reconciliation.";
+  if (plan.checkoutUpdateRequired) return "The locally available canonical branch changed. Update this checkout before Mauro rebuilds trusted repository context.";
+  return recorded
+    ? "The locally available canonical branch changed, but this checkout's content did not. Mauro recorded the new canonical commit."
+    : "The locally available canonical branch changed, but this checkout's content did not. Mauro would record the new canonical commit.";
+}
+
+export function previewReconciliation(root, { observedPaths = gitChangedPaths(root), force = false } = {}) {
+  const plan = reconciliationPlan(root, observedPaths, force);
+  return {
+    dry_run: true,
+    updated: false,
+    would_update: plan.wouldUpdate,
+    would_record_canonical: !plan.wouldUpdate && plan.canonicalTriggers.length > 0,
+    paths: plan.reportedPaths,
+    triggers: plan.triggers,
+    canonical_changed: plan.canonicalTriggers.length > 0,
+    checkout_update_required: plan.checkoutUpdateRequired,
+    migration: plan.migration,
+    reason: plan.wouldUpdate ? "Repository context would be regenerated, but dry-run mode changed no files." : unchangedReason(plan)
+  };
+}
+
 export function reconcile(root, { observedPaths = gitChangedPaths(root), force = false } = {}) {
   return withProjectLock(root, "reconcile repository context", () => {
-    const migration = repositoryMigrationStatus(root);
-    if (!migration.supported) {
-      throw new Error(`Repository context cannot be migrated automatically: ${migration.reasons.join(", ")}.`);
-    }
-    const queuePath = repoPath(root, PATHS.changes);
-    let queued = [];
-    try { queued = readJson(queuePath).paths || []; } catch {}
-    const state = loadState(root);
-    const observed = relevantChangedPaths(observedPaths);
-    const previous = readReconciliation(root);
-    const current = reconciliationState(root, state.config, observed);
-    const triggers = reconciliationReasons(previous, current);
-    const newlyObserved = triggers.includes("working-tree") ? observed : [];
-    const paths = relevantChangedPaths([...queued, ...newlyObserved]);
-    const contentTriggers = triggers.filter((reason) => ["reconciliation-metadata", "working-tree", "head-commit"].includes(reason));
-    const canonicalTriggers = triggers.filter((reason) => reason === "canonical-ref" || reason === "canonical-commit");
-    if (!force && !migration.required && paths.length === 0 && contentTriggers.length === 0) {
-      if (canonicalTriggers.length) writeJson(repoPath(root, PATHS.reconciliation), current);
-      const checkoutUpdateRequired = ["behind", "diverged"].includes(current.canonical_relationship);
+    const plan = reconciliationPlan(root, observedPaths, force);
+    if (!plan.wouldUpdate) {
+      if (plan.canonicalTriggers.length) writeJson(repoPath(root, PATHS.reconciliation), plan.current);
       return {
         updated: false,
         paths: [],
-        triggers,
-        canonical_changed: canonicalTriggers.length > 0,
-        checkout_update_required: checkoutUpdateRequired,
-        migration,
-        reason: canonicalTriggers.length
-          ? checkoutUpdateRequired
-            ? "The locally available canonical branch changed. Update this checkout before Mauro rebuilds trusted repository context."
-            : "The locally available canonical branch changed, but this checkout's content did not. Mauro recorded the new canonical commit."
-          : "Repository evidence has not changed since the last reconciliation."
+        triggers: plan.triggers,
+        canonical_changed: plan.canonicalTriggers.length > 0,
+        checkout_update_required: plan.checkoutUpdateRequired,
+        migration: plan.migration,
+        reason: unchangedReason(plan, true)
       };
     }
     const result = updateMapUnlocked(root);
-    const reportedPaths = force || (paths.length === 0 && contentTriggers.length > 0) ? ["**"] : paths;
     return {
       updated: true,
-      paths: reportedPaths,
-      triggers,
+      paths: plan.reportedPaths,
+      triggers: plan.triggers,
       files: result.map.files.length,
       units: result.map.units.length,
       capabilities: result.map.capabilities.length,
       complete: result.reconciliation.complete,
       pending_paths: result.reconciliation.pending_paths,
       pending_reasons: result.reconciliation.pending_reasons,
-      migration: { ...migration, completed: migration.required }
+      migration: { ...plan.migration, completed: plan.migration.required }
     };
   });
 }

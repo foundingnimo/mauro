@@ -24,23 +24,113 @@ normal repository request into Mauro commands.
 4. Run `mauro reconcile --json`. This refreshes derived context when dirty
    evidence or `HEAD` changed. If only the locally available canonical branch
    changed and the checkout is behind, report it and ask the user to update the
-   checkout. Do not fetch or inspect the other branch.
+   checkout. Evidence verified in the current checkout is still valid for that
+   checkout. Say that it can differ from canonical history; do not call the
+   current code stale unless repository evidence directly contradicts it. Do
+   not fetch or inspect the other branch. Do not use `git show`, `git diff`,
+   `git log`, or equivalent commands to inspect files, changes, or commit
+   messages from the canonical ref. Use only the ref, commit, and relationship
+   metadata that Mauro reports. Verify code after the checkout moves to that
+   history. Do not skip reconciliation because it writes Mauro-owned derived
+   state. That write is authorized ambient maintenance. A timestamp comparison,
+   Git status check, or read-only Brief is not a substitute for reconciliation.
+   If the user explicitly forbids all repository writes, run
+   `mauro reconcile --dry-run --json` instead. Use its pending paths and
+   triggers, change no files, and do not say that reconciliation was skipped.
 5. Run `mauro brief "<objective>" --json`.
-6. Read the returned Navigator sources or use the matching generated
-   repository skills. Read the Charter, applicable Instruction Contracts, and
-   active knowledge.
+6. Read only the returned Navigator sources or use the matching generated
+   repository skills. Read the Charter, every returned Instruction Contract,
+   and active knowledge. Treat the selected paths, supporting documents, and
+   checks as the ranked, bounded starting set.
 
 Do not show routine command output unless it changes the answer, finds stale
-context, or needs a human decision.
+context, or needs a human decision. Do not report that `brief` wrote nothing,
+describe file-timestamp checks, or narrate a successful no-op reconciliation.
+
+## Work depth and delegation
+
+For orientation, ownership, affected-path, or other read-only briefing
+requests, read the selected Navigator sources directly. Verify only the claims
+needed to answer the request. Do not launch a Navigator agent merely because
+the Brief returned it.
+
+If current evidence shows that the user's premise already holds, or the request
+has two materially different interpretations, stop after the concise evidence
+and one focused decision question. Do not produce paths, risks, checks, or an
+implementation plan for an assumed interpretation unless the user explicitly
+asked for a contingent plan. Build the detailed brief after the user confirms
+the intended change.
+
+Delegate to the smallest relevant Navigator set only when the user asks for a
+deep investigation or review, implementation planning needs independent
+cross-capability evidence, or bounded direct checks leave a material ambiguity.
+Do not expand into an audit, Refit, or backlog of adjacent problems unless the
+user asks. Mention an incidental finding only when it blocks the requested
+work, creates a safety risk, or changes the immediate decision.
+
+Do not present model memory, host or auto-memory files, saved session notes, an
+earlier conversation, or a previous session's observation as repository
+evidence. This includes notes attributed to the user but not supplied in the
+current request. Use them only to choose what to verify. Omit them from the
+answer unless current code, tests, the current request, or approved active
+Mauro knowledge confirms them.
+
+When delegation is necessary, collect the relevant results before giving the
+substantive answer. Reconcile disagreements and return one final set of paths,
+risks, and checks. Do not stream provisional recommendations that later agent
+results correct.
+
+## Mandatory pre-response gate
+
+Run this gate silently immediately before every substantive answer. Do not
+send the answer until every applicable item passes. If one item fails, revise
+the draft and run the gate again.
+
+1. Classify the answer as a decision gate when verified evidence shows that
+   the user's premise already holds, or when two materially different
+   interpretations remain. Do not use this classification when the user asked
+   for detailed evidence or a contingent implementation plan.
+2. For a decision gate, keep only:
+   - one concise verified conclusion;
+   - one freshness caveat, only when it materially limits the conclusion; and
+   - exactly one focused decision question.
+3. For a decision gate, remove ownership and specialist lists, path
+   inventories, risks, verification checks, speculative implementation,
+   adjacent findings, and routine write or command bookkeeping. Use only the
+   smallest evidence reference needed to support the conclusion.
+4. For every answer, remove content that does not change the answer or the
+   user's immediate decision. Do not say that no files changed, that a Brief
+   wrote nothing, or that a no-op reconciliation ran.
+5. Check whether the work exposed a verified Mauro limitation. Follow the
+   contribution workflow after the current task, without weakening a required
+   decision gate.
 
 ## During and after work
 
-- Treat a brief as a bounded starting point. A Navigator must verify semantic
-  scope against code.
+- Treat a brief as a ranked, bounded starting point. Do not load every Map
+  capability as a precaution. A selected Navigator must verify semantic scope
+  against code and expand the set only when code evidence requires it.
 - Follow active Voyage path leases. Do not start overlapping implementation.
 - Run the exact checks named by the relevant Navigator when they still exist.
+- Before presenting checks, inspect the relevant package scripts. Remove a
+  command when another selected command runs it. For example, do not list
+  `type-check` or `lint` separately when the selected `test` script runs both.
+  Claim this coverage only from the current package manifest.
 - At the end of a material change, run `mauro reconcile --json` again. Report
   suspect documents, boundary conflicts, and required decisions.
+
+## Improve Mauro itself
+
+If current evidence exposes a Mauro defect, repeated workaround, missing
+reusable operation, avoidable time or context cost, host-adapter problem, or
+safety conflict, read [Contribution](contribute.md). Finish the current task
+first unless the problem blocks it. Record one generalized candidate in the
+private contribution log. Offer to prepare a GitHub suggestion or code pull
+request only when the candidate is new.
+
+Do not record an ordinary target-repository problem as a Mauro improvement.
+Do not put repository names, absolute paths, tickets, product code, raw logs,
+credentials, secrets, or customer data in a candidate.
 
 ## Autonomy boundary
 

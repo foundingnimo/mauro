@@ -1,13 +1,14 @@
 import { ALIASES, PUBLIC_COMMANDS } from "./constants.mjs";
 
 const DETAILS = {
-  brief: "Build compact implementation context for an objective without starting a Voyage.",
+  brief: "Build ranked, bounded implementation context for an objective without starting a Voyage.",
   charter: "Create, show, update, diff, or validate the human-owned Charter. `validate` reports template, partial, or complete.",
   check: "Run a read-only Bearing check for stale knowledge and generated context.",
+  contribute: "Record, preview, dismiss, or mark an upstream Mauro improvement as submitted.",
   docs: "Show document state, run freshness checks, build review packets for suspect documents, or confirm a reviewed document.",
   doctor: "Validate the Mauro installation and project state, or safely clear a proven stale local lock.",
   help: "Show general help or help for one command.",
-  impact: "Find likely capabilities and Navigators for a proposed change.",
+  impact: "Rank likely capabilities and Navigators for a proposed change.",
   init: "Pin the user-selected canonical branch, then run the first Expedition.",
   knowledge: "Show, search, propose, verify, update, or retire Logbook records.",
   map: "Show, find, update, or verify the observed repository Map.",
@@ -28,6 +29,7 @@ const USAGE = {
   brief: "mauro brief <objective> [--json]",
   charter: "mauro charter <create|show|update|diff|validate>",
   check: "mauro check [--json]",
+  contribute: "mauro contribute <record|list|show|preview|dismiss|submitted|doctor> [arguments] [--json]",
   docs: "mauro docs <status|check|review [id] [--allow-behind]|confirm <id> --evidence <file> [--allow-behind]> [--json]",
   doctor: "mauro doctor [--clear-stale-lock]",
   help: "mauro help [command]",
@@ -38,7 +40,7 @@ const USAGE = {
   next: "mauro next [--json]",
   navigator: "mauro navigator <list|show|regenerate|review> [value]",
   pr: "mauro pr <preview|check|update|reviewers> [--base <ref>]",
-  reconcile: "mauro reconcile [--force] [--json]",
+  reconcile: "mauro reconcile [--force] [--dry-run] [--json]",
   refit: "mauro refit propose [scope]",
   run: "mauro run <objective> [--allow-behind] | status [id] | activate <id> [--path <path>]... [--allow-behind] | resume <id> [--allow-behind] | finish <id> [--allow-behind] | abandon <id> --reason <reason>",
   status: "mauro status [--json]",

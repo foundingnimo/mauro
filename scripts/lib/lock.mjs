@@ -19,9 +19,18 @@ function userKey() {
   return `user-${digest(userInfo().username, 16)}`;
 }
 
+function stateLockPath(identity) {
+  const key = digest(identity);
+  return join(tmpdir(), `mauro-locks-${userKey()}`, key, "state.lock");
+}
+
 export function projectLockPath(root) {
-  const identity = digest(realpathSync(root));
-  return join(tmpdir(), `mauro-locks-${userKey()}`, identity, "state.lock");
+  return stateLockPath(`project:${realpathSync(root)}`);
+}
+
+export function userStateLockPath(name) {
+  if (typeof name !== "string" || !name.trim()) throw new Error("A user-state lock name is required.");
+  return stateLockPath(`user:${name.trim()}`);
 }
 
 function ensurePrivateDirectory(path) {
@@ -95,15 +104,20 @@ export function projectLockStatus(root) {
   return owner ? { ...publicOwner(owner), path } : null;
 }
 
-export function clearStaleProjectLock(root) {
-  const path = projectLockPath(root);
+export function userStateLockStatus(name) {
+  const path = userStateLockPath(name);
   const owner = readOwner(path);
-  if (!owner) return { cleared: false, path, reason: "No project-state lock exists." };
+  return owner ? { ...publicOwner(owner), path } : null;
+}
+
+function clearStaleLock(path, label) {
+  const owner = readOwner(path);
+  if (!owner) return { cleared: false, path, reason: `No ${label} lock exists.` };
   if (owner.state === "unreadable") throw new Error(`Mauro cannot prove that the unreadable lock at ${path} is stale. Inspect it manually; no file was removed.`);
   if (owner.state !== "stale") throw new Error(`Mauro cannot clear the active lock for ${owner.operation} (PID ${owner.pid}, host ${owner.host}). No file was removed.`);
   const verified = readOwner(path);
   if (!verified || verified.state !== "stale" || verified.token !== owner.token) {
-    throw new Error("The project-state lock changed during stale-lock verification. No file was removed.");
+    throw new Error(`The ${label} lock changed during stale-lock verification. No file was removed.`);
   }
   try {
     unlinkSync(path);
@@ -114,9 +128,17 @@ export function clearStaleProjectLock(root) {
   return { cleared: true, path, owner: publicOwner(owner) };
 }
 
-function contentionError(path, operation, owner) {
+export function clearStaleProjectLock(root) {
+  return clearStaleLock(projectLockPath(root), "project-state");
+}
+
+export function clearStaleUserStateLock(name) {
+  return clearStaleLock(userStateLockPath(name), "user-state");
+}
+
+function contentionError(path, operation, owner, recoveryCommand) {
   if (owner?.state === "stale") {
-    return new Error(`Mauro state has a stale lock at ${path} from ${owner.operation || "an unknown operation"} (PID ${owner.pid}, host ${owner.host}). Run \`mauro doctor --clear-stale-lock\`, then retry ${operation}.`);
+    return new Error(`Mauro state has a stale lock at ${path} from ${owner.operation || "an unknown operation"} (PID ${owner.pid}, host ${owner.host}). Run \`${recoveryCommand}\`, then retry ${operation}.`);
   }
   if (owner?.state === "unreadable") {
     return new Error(`Mauro state is locked at ${path}, but the owner metadata is unreadable. Do not remove it while another Mauro process can be running. Retry ${operation} after the writer finishes.`);
@@ -127,8 +149,7 @@ function contentionError(path, operation, owner) {
   return new Error(`Mauro state is locked by ${detail}. Retry ${operation} after the writer finishes.`);
 }
 
-function acquire(root, operation, timeoutMs) {
-  const path = projectLockPath(root);
+function acquire(path, operation, timeoutMs, recoveryCommand) {
   prepareLockDirectory(path);
   const owner = {
     schema_version: 1,
@@ -147,10 +168,10 @@ function acquire(root, operation, timeoutMs) {
       if (error?.code !== "EEXIST") throw error;
       const current = readOwner(path);
       if (current?.pid === process.pid && current?.host === localHost) {
-        throw new Error(`Mauro already holds the project-state lock for ${current.operation}. Nested state mutation is not allowed while starting ${operation}.`);
+        throw new Error(`Mauro already holds the state lock for ${current.operation}. Nested state mutation is not allowed while starting ${operation}.`);
       }
       if (current?.state === "stale" || Date.now() >= deadline) {
-        throw contentionError(path, operation, current);
+        throw contentionError(path, operation, current, recoveryCommand);
       }
       Atomics.wait(sleeper, 0, 0, Math.min(LOCK_RETRY_MS, deadline - Date.now()));
     }
@@ -168,12 +189,21 @@ function release(lock) {
 }
 
 export function withProjectLock(root, operation, callback, options = {}) {
+  return withStateLock(projectLockPath(root), operation, callback, { recoveryCommand: "mauro doctor --clear-stale-lock", ...options });
+}
+
+export function withUserStateLock(name, operation, callback, options = {}) {
+  return withStateLock(userStateLockPath(name), operation, callback, options);
+}
+
+function withStateLock(path, operation, callback, options = {}) {
   if (typeof operation !== "string" || !operation.trim()) throw new Error("A lock operation name is required.");
   if (operation.length > 120 || /[\r\n\0]/.test(operation)) throw new Error("A lock operation name must be one line and 120 characters or fewer.");
   if (typeof callback !== "function") throw new Error("A lock callback is required.");
   const timeoutMs = options.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 0) throw new Error("Lock timeout must be a non-negative integer.");
-  const lock = acquire(root, operation.trim(), timeoutMs);
+  const recoveryCommand = options.recoveryCommand || "mauro doctor --clear-stale-lock";
+  const lock = acquire(path, operation.trim(), timeoutMs, recoveryCommand);
   let result;
   try {
     result = callback();

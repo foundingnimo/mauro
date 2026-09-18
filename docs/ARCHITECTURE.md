@@ -34,6 +34,13 @@ validates and records them, so read-only agents do not write repository state.
 Reports from the same agent and Voyage are one observation. Repeated evidence
 promotes a gap to a candidate; it does not install or execute new code.
 
+The Mauro improvement log is user-private state outside both the target
+repository and installed runtime. It stores sanitized, generalized candidates
+for Mauro itself, uses stable keys to deduplicate repeated observations, and
+serializes writes with a per-user lock. The deterministic core can render an
+exact suggestion or pull-request preview without a network call. A host
+adapter performs any authorized GitHub write and records the returned URL.
+
 Mauro serializes deterministic state mutations with a transient local lock in
 the host's private temporary directory. Its path contains a digest of the
 working-tree path inside a per-user namespace, so it does not alter Git state.
@@ -58,6 +65,26 @@ It compares the pinned branch with HEAD and reports current, ahead, behind,
 diverged, detached, missing, or unpinned state. It never performs a network or
 working-tree operation. An explicit override can accept checkout drift, but it
 cannot replace the required branch choice.
+
+Task briefing is another deterministic-core operation. It tokenizes the
+objective and capability metadata into normalized exact terms, weights primary
+paths and capability identity most strongly, and discounts terms shared across
+many capabilities. It keeps at most three responsible capabilities. Review
+expansion follows only relationships declared by those capabilities and keeps
+at most two reviewers. The Brief narrows likely paths to the strongest path
+matches, preserves every applicable Instruction Contract, and caps supporting
+documents and proposed verification commands at eight each. This keeps host
+context bounded without treating lexical ranking as semantic proof. Before the
+cap, Mauro reads current package manifests and removes an npm check when
+another selected npm script for that package invokes it. It does not infer
+coverage from command names alone.
+
+Every deterministic Brief also carries the pre-response contract. The host
+must apply it after semantic verification and immediately before answering.
+It reduces a contradicted-premise or materially ambiguous response to the
+verified conclusion, a material freshness caveat when needed, and one decision
+question. The contract also names content that must be removed, so the rule is
+present in the task data as well as the host skill.
 
 ### Semantic survey
 
@@ -99,6 +126,13 @@ Standalone installation keeps the runtime at `~/.mauro`; Claude and shared
 skill directories are adapters around that one runtime. The former
 `~/.claude/mauro` runtime is a supported upgrade source, not the current
 installation target.
+
+The installer writes `.install.json` beside the runtime with its version,
+source commit, source path, host profiles, hook choice, installation time, and
+whether the source checkout was dirty. Install and version output append
+`-dirty` to the commit label when uncommitted source was copied. Doctor returns
+the same stamp, so a development runtime cannot claim to be the clean commit
+at its HEAD.
 
 Some hosts cache agents or skills at session start. A session that was already
 open when Mauro initialized, updated the Map, or regenerated Navigators can
@@ -183,6 +217,11 @@ canonical-only change is recorded and reported. Mauro does not inspect the
 other branch or rebuild trusted context until the checkout is updated. Hosts
 without Mauro lifecycle hooks follow the same operation through the ambient
 skill at task boundaries.
+
+When a user explicitly forbids all repository writes, the ambient skill uses
+the reconciliation dry-run. It calculates the same pending paths, triggers,
+migration work, and canonical movement, but does not update the Map, generated
+views, queue, fingerprints, or reconciliation metadata.
 
 Each document records its verification commit: the Git commit that its
 fingerprints describe. The fingerprints decide which documents need a review.

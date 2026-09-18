@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+- Raise the minimum runtime to Node.js 22, the oldest supported LTS line, and
+  fail early with a clear message when the CLI or standalone installer runs on
+  an older version.
+- Rank capability matches for `impact` and `brief` instead of selecting every
+  capability with a loose substring match.
+- Keep task Briefs focused: at most three responsible capabilities, two
+  explicit reviewers, eight supporting documents, and eight verification
+  commands, with likely paths narrowed to the best matching capability paths.
+- Add a large-monorepo regression for a direct-debit application change that
+  spans the marketplace web application and backend API without loading the
+  whole Map.
+- Describe evidence from a behind checkout as verified for that checkout but
+  potentially different from canonical history, rather than calling its code
+  stale without contradictory evidence.
+- Keep ordinary orientation lightweight: read selected Navigator views
+  directly, delegate only for material depth or ambiguity, and reconcile any
+  delegated results into one non-provisional answer.
+- When a checkout is behind, report canonical metadata without inspecting the
+  other branch's files, diffs, or commits; keep unverified model and session
+  memory out of repository guidance.
+- Treat host and auto-memory files, saved session notes, and notes attributed
+  to the user as verification leads rather than current repository evidence.
+- Record whether a standalone runtime came from a dirty source checkout and
+  label its revision `<commit>-dirty` in installer and version output.
+- Document sidecar mode as the recommended installation, with exact Unix and
+  PowerShell setup, first-Expedition, verification, restart, and update steps.
+- Keep ambient reconciliation authorized during read-only requests, hide
+  routine no-op bookkeeping, stop at contradicted-premise decision gates, and
+  remove npm checks already invoked by another selected package script.
+- Add a read-only reconciliation preview for requests that explicitly forbid
+  every repository write.
+- Add a private, deduplicated Mauro improvement log with sanitized GitHub
+  suggestion and code pull-request previews, safe stale-lock recovery, and an
+  ambient opt-in prompt for newly discovered candidates.
+- Put a mandatory pre-response contract in every Brief so contradicted or
+  ambiguous requests stop at concise evidence and one decision question.
+- Validate local Markdown links and anchors during release checks, and document
+  the complete clean-tree, version, and tag sequence.
+
 ## 0.2.2 (2026-09-17)
 
 - Add a deterministic, role-specific Expedition survey-report validator that

@@ -8,6 +8,16 @@ MAURO_LEGACY_RUNTIME_DIR="${MAURO_CLAUDE_DIR}/mauro"
 MAURO_CLAUDE_SKILLS_DIR="${MAURO_CLAUDE_DIR}/skills"
 MAURO_SHARED_SKILLS_DIR=${AGENT_SKILLS_DIR:-"${HOME}/.agents/skills"}
 
+if ! command -v node >/dev/null 2>&1; then
+  echo "Mauro requires Node.js 22 or newer; node was not found." >&2
+  exit 1
+fi
+MAURO_NODE_MAJOR=$(node -p 'Number.parseInt(process.versions.node.split(".")[0], 10)')
+if [ "${MAURO_NODE_MAJOR}" -lt 22 ]; then
+  echo "Mauro requires Node.js 22 or newer; found $(node --version)." >&2
+  exit 1
+fi
+
 MAURO_MODE=install
 MAURO_HOST=all
 MAURO_HOOKS=yes
@@ -73,8 +83,27 @@ mauro_commit() {
   git -C "$1" rev-parse --short HEAD 2>/dev/null || echo "no commit"
 }
 
+mauro_dirty() {
+  if git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      && [ -n "$(git -C "$1" status --porcelain --untracked-files=normal 2>/dev/null)" ]; then
+    echo true
+  else
+    echo false
+  fi
+}
+
+mauro_revision_label() {
+  if [ "$2" = true ]; then
+    printf '%s-dirty' "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 MAURO_SOURCE_VERSION=$(mauro_version "${MAURO_SOURCE_DIR}")
 MAURO_SOURCE_COMMIT=$(mauro_commit "${MAURO_SOURCE_DIR}")
+MAURO_SOURCE_DIRTY=$(mauro_dirty "${MAURO_SOURCE_DIR}")
+MAURO_SOURCE_REVISION=$(mauro_revision_label "${MAURO_SOURCE_COMMIT}" "${MAURO_SOURCE_DIRTY}")
 MAURO_CURRENT_RUNTIME=${MAURO_RUNTIME_DIR}
 if [ ! -e "${MAURO_CURRENT_RUNTIME}" ] && [ -e "${MAURO_LEGACY_RUNTIME_DIR}" ]; then
   MAURO_CURRENT_RUNTIME=${MAURO_LEGACY_RUNTIME_DIR}
@@ -88,9 +117,9 @@ mauro_installed() {
 
 if mauro_installed; then
   MAURO_INSTALLED_VERSION=$(mauro_version "${MAURO_CURRENT_RUNTIME}")
-  MAURO_INSTALLED_COMMIT=$(node -e 'try { process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).commit || "unknown commit") } catch { process.stdout.write("unknown commit") }' "${MAURO_CURRENT_RUNTIME}/.install.json" 2>/dev/null || echo "unknown commit")
-  echo "Mauro ${MAURO_INSTALLED_VERSION} (${MAURO_INSTALLED_COMMIT}) is installed in ${MAURO_CURRENT_RUNTIME}."
-  echo "This checkout is ${MAURO_SOURCE_VERSION} (${MAURO_SOURCE_COMMIT})."
+  MAURO_INSTALLED_REVISION=$(node -e 'try { const stamp=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); const commit=stamp.commit || "unknown commit"; process.stdout.write(stamp.dirty === true ? `${commit}-dirty` : commit); } catch { process.stdout.write("unknown commit"); }' "${MAURO_CURRENT_RUNTIME}/.install.json" 2>/dev/null || echo "unknown commit")
+  echo "Mauro ${MAURO_INSTALLED_VERSION} (${MAURO_INSTALLED_REVISION}) is installed in ${MAURO_CURRENT_RUNTIME}."
+  echo "This checkout is ${MAURO_SOURCE_VERSION} (${MAURO_SOURCE_REVISION})."
   if [ "${MAURO_MODE}" != update ]; then
     if [ "${MAURO_ASSUME_YES}" = yes ]; then
       MAURO_MODE=update
@@ -131,8 +160,8 @@ MAURO_STAMP_HOOKS=false
 if [ "${MAURO_HOOKS}" = yes ] && { [ "${MAURO_HOST}" = claude ] || [ "${MAURO_HOST}" = all ]; }; then
   MAURO_STAMP_HOOKS=true
 fi
-node -e 'const fs=require("fs"); const [path,version,commit,source,runtime,hosts,hooks]=process.argv.slice(1); fs.writeFileSync(path, JSON.stringify({version,commit,source,runtime,hosts:JSON.parse(hosts),hooks:hooks==="true",installed_at:new Date().toISOString()},null,2)+"\n")' \
-  "${MAURO_STAGE_DIR}/.install.json" "${MAURO_SOURCE_VERSION}" "${MAURO_SOURCE_COMMIT}" "${MAURO_SOURCE_DIR}" "${MAURO_RUNTIME_DIR}" "${MAURO_HOSTS_JSON}" "${MAURO_STAMP_HOOKS}"
+node -e 'const fs=require("fs"); const [path,version,commit,dirty,source,runtime,hosts,hooks]=process.argv.slice(1); fs.writeFileSync(path, JSON.stringify({version,commit,dirty:dirty==="true",source,runtime,hosts:JSON.parse(hosts),hooks:hooks==="true",installed_at:new Date().toISOString()},null,2)+"\n")' \
+  "${MAURO_STAGE_DIR}/.install.json" "${MAURO_SOURCE_VERSION}" "${MAURO_SOURCE_COMMIT}" "${MAURO_SOURCE_DIRTY}" "${MAURO_SOURCE_DIR}" "${MAURO_RUNTIME_DIR}" "${MAURO_HOSTS_JSON}" "${MAURO_STAMP_HOOKS}"
 
 mkdir -p "$(dirname -- "${MAURO_RUNTIME_DIR}")"
 MAURO_BACKUP_DIR="${MAURO_RUNTIME_DIR}.previous-$$"
@@ -170,9 +199,9 @@ if [ "${MAURO_HOOKS}" = yes ] && { [ "${MAURO_HOST}" = claude ] || [ "${MAURO_HO
 fi
 
 if [ "${MAURO_MODE}" = update ]; then
-  echo "Updated Mauro to ${MAURO_SOURCE_VERSION} (${MAURO_SOURCE_COMMIT}) for ${MAURO_HOST}. Restart open coding-agent sessions."
+  echo "Updated Mauro to ${MAURO_SOURCE_VERSION} (${MAURO_SOURCE_REVISION}) for ${MAURO_HOST}. Restart open coding-agent sessions."
 else
-  echo "Installed Mauro ${MAURO_SOURCE_VERSION} (${MAURO_SOURCE_COMMIT}) for ${MAURO_HOST}. Restart open coding-agent sessions."
+  echo "Installed Mauro ${MAURO_SOURCE_VERSION} (${MAURO_SOURCE_REVISION}) for ${MAURO_HOST}. Restart open coding-agent sessions."
 fi
 if [ "${MAURO_HOOKS}" = no ] && { [ "${MAURO_HOST}" = claude ] || [ "${MAURO_HOST}" = all ]; }; then
   echo "Claude hooks were not installed. Mauro remains available on demand."

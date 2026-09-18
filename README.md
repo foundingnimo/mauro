@@ -47,16 +47,27 @@ The current release provides:
 - Separate Map-publication and Bearing-health status
 - Scoped monitoring for agent Instruction Contracts, with size and duplicate
   warnings
-- Ambient reconciliation and compact task briefs
+- Ambient reconciliation and ranked, bounded task briefs
+- A mandatory pre-response gate that stops ambiguous tasks at one concise
+  decision question
 - Portable repository skills plus Claude Code agents, hooks, and path rules
 
 Semantic capability mapping, context curation, and Refit proposals are
 performed by the host coding agent through `mauro-context`. The separate
 `mauro` skill handles explicit administration commands.
 
-## Quickstart
+## Quickstart: sidecar mode
 
-1. Install Mauro:
+Sidecar mode is the recommended way to use Mauro. Install it once for the
+current user, then work with your coding agent normally. Mauro runs at agent
+session and task boundaries; it is not a daemon and no Mauro terminal needs to
+stay open. The `mauro-context` skill handles automatic repository context, and
+the separate `mauro` skill provides optional administration commands.
+
+Prerequisites: Git, Node.js 22 or newer, and at least one coding agent that
+supports Claude skills or shared `SKILL.md` files.
+
+1. Clone Mauro and install both the Claude and shared-agent adapters:
 
    ```bash
    git clone https://github.com/foundingnimo/mauro.git
@@ -64,95 +75,112 @@ performed by the host coding agent through `mauro-context`. The separate
    ./install.sh --host all
    ```
 
-   `all` installs the Claude and shared-skill adapters. PowerShell users can
-   run `./install.ps1 -TargetHost all`.
+   On PowerShell:
 
-2. Restart the coding agent and open the repository. Ask it to do normal
-   repository work. The Mauro skill initializes the repository on the first
-   substantial task, reconciles changed evidence, builds a compact brief, and
-   loads the relevant Navigators.
+   ```powershell
+   git clone https://github.com/foundingnimo/mauro.git
+   cd mauro
+   ./install.ps1 -TargetHost all
+   ```
 
-   For example:
+   `--host all` is the safest choice when you use more than one coding agent.
+   It installs the provider-neutral runtime in `~/.mauro`, Claude skills and
+   lifecycle hooks in `~/.claude`, and shared skills for Codex, Grok, and other
+   compatible hosts in `~/.agents/skills`. It preserves unrelated agent
+   settings and files.
+
+2. Confirm the installed version, then restart every open coding-agent
+   session so it loads the new skills:
+
+   ```bash
+   ~/.mauro/bin/mauro --version
+   ```
+
+   Mauro does not add itself to `PATH`; installed skills call this runtime
+   directly. On PowerShell, use:
+
+   ```powershell
+   node "$HOME\.mauro\bin\mauro" --version
+   ```
+
+3. Open the target repository in a **new** agent session and give the agent a
+   normal repository request. You do not need to run `/mauro init` first.
 
    ```text
    Add account recovery. Check the repository architecture and existing rationale first.
    ```
 
-   Mauro remains visible when it finds a conflict, stale document, preliminary
-   boundary, or decision that needs approval. Routine refresh output stays out
-   of the conversation.
+   On the first substantial task, `mauro-context` notices that the repository
+   has no Mauro state and starts the first Expedition. If you prefer to start
+   it explicitly in Claude Code, run `/mauro init`.
 
-3. On Claude Code, `/mauro init` is the explicit bootstrap command when you
-   want to inspect the first Expedition yourself. Mauro lists the available
-   local and remote-tracking branches and asks which exact branch represents
-   accepted history. It does not infer the answer. The provider-neutral CLI
-   then runs `mauro init --canonical-ref <selected-branch> --root <repo>`.
-   Initialization inventories the safe
-   repository perimeter, creates the Charter and durable knowledge structure,
-   and publishes repository-specific Navigators under both `.claude/agents/`
-   and `.agents/skills/`. Before semantic surveys start, Mauro maps supported
-   agent instruction files as human-owned Instruction Contracts. It records
-   provider, scope, inheritance, and size. An oversized-file warning does not
-   block initialization.
+4. Select the exact branch that represents accepted repository history when
+   Mauro asks for the canonical branch, for example `origin/main` or `main`.
+   Mauro lists locally available local and remote-tracking branches, but it
+   does not infer the answer and never fetches, switches, merges, or rebases.
+   Update the repository's Git refs yourself first if the branch you need is
+   not available locally.
 
-4. Ask what Mauro knows at any time:
+5. Review the proposed capability boundaries and approve or correct them.
+   Initialization inventories the safe repository perimeter, maps supported
+   agent instruction files as human-owned Instruction Contracts, and drafts
+   one Navigator per approved capability. On a large monorepo this first
+   Expedition can take significant time and tokens. It does not edit product
+   code.
 
-   ```text
-   What Navigators did Mauro add?
-   What parts of the repository are affected by this ticket?
-   What would be a better structure for this code?
-   ```
+6. After publication, review the generated repository state before committing
+   it. Mauro normally creates `.mauro/`, `docs/mauro/`, and `.agents/skills/`;
+   the Claude adapter also creates `.claude/agents/` and
+   `.claude/rules/mauro/`. Commit these shared views when other worktrees,
+   clones, or teammates should receive the same Map and Navigators. Restart
+   agent sessions once more so hosts that cache skills discover the generated
+   Navigators.
 
-   The administrative equivalents are `/mauro next`, `/mauro brief
-   "<objective>"`, `/mauro status`, and `/mauro help`.
+That is the complete sidecar setup. From then on, use the coding agent as
+usual. Mauro quietly reconciles changed evidence, builds ranked and bounded
+task briefs, and loads only the relevant Navigator views. It speaks up when it
+finds a conflict, stale document, preliminary boundary, or decision that needs
+approval. Routine refresh output stays out of the conversation.
 
-5. For coordinated implementation, the agent creates a Voyage:
+Useful questions include:
 
-   ```text
-   /mauro run "Add account recovery"
-   ```
+```text
+What Navigators did Mauro add?
+What parts of the repository are affected by this ticket?
+What would be a better structure for this code?
+```
 
-   This creates a durable planning record such as `V-0001`; it does not claim
-   code paths yet. Mauro selects the responsible Navigators and relevant
-   knowledge and writes the proposed plan to the returned Chronicle path.
-   After you approve the plan, Mauro activates its predicted path scope:
+The explicit `/mauro help`, `/mauro status`, `/mauro doctor`, `/mauro brief
+"<objective>"`, and `/mauro reconcile` commands are for inspection,
+diagnostics, and automation. They are not required for ordinary sidecar use.
+If a request explicitly forbids every repository write, the sidecar uses
+`/mauro reconcile --dry-run` to inspect pending refresh work without changing
+Mauro state.
+For coordinated implementation across sessions, `/mauro run "<objective>"`
+creates a Voyage; see [Concurrent sessions](#concurrent-sessions).
 
-   ```text
-   /mauro run activate V-0001
-   ```
+If the repository already contains valid committed Mauro state, a new session
+uses that Map and its Navigators instead of starting another Expedition. It
+reconciles locally changed evidence first.
 
-   Use one or more `--path <repository-path>` values when the approved scope
-   differs from Mauro's prediction. Activation refuses paths held by another
-   active Voyage. After verification, document review, and context curation,
-   close the lease with `/mauro run finish V-0001`. If the work stops, use
-   `/mauro run abandon V-0001 --reason "<reason>"`. Mauro does not commit,
-   push, deploy, or update a pull request without explicit authorization.
-
-The agent normally runs `/mauro reconcile` and `/mauro check` for you. These
-commands remain available for diagnostics and automation. Reconciliation
-tracks dirty-path content, `HEAD`, the configured canonical ref, and its locally
-available commit. A clean commit, branch switch, or fast-forward therefore
-refreshes the Map and discovers new Instruction Contracts. Mauro reports a
-canonical branch that moved ahead of the checkout, but it does not fetch or
-inspect that other branch. It rebuilds trusted context after the checkout is
-updated.
+Reconciliation tracks dirty-path content, `HEAD`, the configured canonical
+ref, and its locally available commit. A clean commit, branch switch, or
+fast-forward therefore refreshes the Map and discovers new Instruction
+Contracts. Mauro reports a canonical branch that moved ahead of the checkout,
+but it does not inspect that branch's content. It rebuilds trusted context
+after you update the checkout.
 
 ## Install
 
-### Standalone installation
+### Sidecar installation
 
-Standalone installation preserves the `/mauro` command:
-
-```bash
-./install.sh
-```
-
-The installer puts the provider-neutral runtime in `~/.mauro`. It publishes
-two non-overlapping skills: `mauro-context` is the automatic repository
-sidecar, and `mauro` is the explicit administration command. The default
-`--host all` profile installs both skills in `~/.claude/skills/` and
-`~/.agents/skills/`, preserves unrelated Claude settings, creates a settings
-backup, and adds Claude lifecycle hooks.
+Sidecar mode uses the standalone installer shown in the
+[quickstart](#quickstart-sidecar-mode). The installer puts the
+provider-neutral runtime in `~/.mauro`. It publishes two non-overlapping
+skills: `mauro-context` is the automatic repository sidecar, and `mauro` is the
+explicit administration command. The default `--host all` profile installs
+both skills in `~/.claude/skills/` and `~/.agents/skills/`, preserves unrelated
+Claude settings, creates a settings backup, and adds Claude lifecycle hooks.
 
 Choose a narrower profile when needed:
 
@@ -165,31 +193,65 @@ Choose a narrower profile when needed:
 Use `--no-hooks` when you do not want user-level Claude hooks. PowerShell uses
 `-TargetHost claude|shared|all` and `-NoHooks`.
 
-Restart open coding-agent sessions. To verify the installation, run:
+Restart open coding-agent sessions. To verify the runtime itself, run:
 
-```text
-/mauro help
-/mauro init
+```bash
+~/.mauro/bin/mauro --version
+cd /path/to/a/repository
+~/.mauro/bin/mauro doctor --root .
 ```
 
-Standalone Claude mode keeps the short `/mauro` command and receives automatic
-session and change hooks. Other compatible agents discover `mauro-context` in
-the shared skill directory and reconcile at task boundaries even when that
-host has no Mauro-specific lifecycle hook.
+In an agent session, `/mauro help` verifies the explicit Claude command. Do not
+run `/mauro init` only to test the installation: opening a repository and
+making a normal request exercises the sidecar path, and init starts a real
+Expedition if the repository has no Mauro state.
 
-Run `./install.sh` again to update. It detects the installation, shows the
-installed and checkout versions, and asks before it replaces the neutral
-runtime and the skills for the selected host profile. An update whose profile
-includes Claude automatically migrates the old `~/.claude/mauro` runtime to
-`~/.mauro`, preserves unrelated settings, and refreshes only Mauro-owned
-hooks. Without a terminal, pass `--update` or `--yes`
-(PowerShell: `./install.ps1 -Update` or `-Yes`). Restart open agent sessions
-afterwards, because a running session can keep old skill text.
+Claude receives automatic session and change hooks. Other compatible agents
+discover `mauro-context` in the shared skill directory and reconcile at task
+boundaries even when that host has no Mauro-specific lifecycle hook.
 
-`mauro --version` prints the version, the commit and the checkout an
-installation came from. `mauro doctor` prints the same stamp and checks the
-runtime, selected skill adapters, Claude hooks, project lock, and any required
-repository-state migration.
+To update a sidecar installation from the cloned Mauro repository:
+
+```bash
+cd /path/to/mauro
+git pull --ff-only
+./install.sh --update --host all
+```
+
+On PowerShell, use `./install.ps1 -Update -TargetHost all`. The installer shows
+the installed and checkout versions before replacement. An update whose
+profile includes Claude automatically migrates the old `~/.claude/mauro`
+runtime to `~/.mauro`, preserves unrelated settings, and refreshes only
+Mauro-owned hooks. Restart open agent sessions afterwards, because a running
+session can keep old skill text.
+
+`mauro --version` prints the version, source commit, and checkout an
+installation came from. A runtime copied from an uncommitted source checkout
+uses a `<commit>-dirty` revision label. Its `.install.json` stamp records
+`"dirty": true`, and `mauro doctor` exposes the same provenance before it
+checks the runtime, selected skill adapters, Claude hooks, project lock, and
+any required repository-state migration.
+
+### Contribute back
+
+Tell Mauro an idea in normal language or run:
+
+```text
+/mauro contribute "Reconciliation needs a read-only preview."
+```
+
+The sidecar can also recognize a verified limitation in Mauro itself. It
+records one deduplicated candidate in private user state and, only for a new
+candidate, offers to prepare either a GitHub suggestion or a code pull
+request. It does not put this log in the target repository or installed Mauro
+runtime.
+
+Mauro shows the exact suggestion or draft-PR text before submission. It asks
+for explicit authorization before it creates an issue, branch, commit, push,
+or pull request. Code changes are made in a Mauro source checkout, never in
+`~/.mauro`. Candidate text is generalized and must not include target-project
+names, paths, tickets, code, logs, credentials, secrets, or customer data.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete contributor workflow.
 
 ### Agent compatibility
 
@@ -204,18 +266,26 @@ The shared surface is intentionally smaller than Claude's adapter. It provides
 the same facts and safety boundaries, but host-specific automatic hooks and
 delegation UI depend on the agent. See the official [Codex skill
 documentation](https://learn.chatgpt.com/docs/build-skills), [Claude Code MCP
-documentation](https://docs.anthropic.com/en/docs/claude-code/mcp), and [Grok
+documentation](https://code.claude.com/docs/en/mcp), and [Grok
 skills and plugin documentation](https://docs.x.ai/build/features/skills-plugins-marketplaces).
 
 ### Releasing
 
-`package.json` is the only place the version is written. Release with npm:
+Keep release changes and notes under `## Unreleased` while you work. Commit the
+feature changes first so `npm version` starts from a clean working tree, then
+create and push the release commit and tag:
 
 ```bash
-npm version patch   # or minor, major
+git status --short
+git add -A
+git commit -m "Describe the release changes"
+npm version minor   # or patch, major
+git push --follow-tags
 ```
 
-`preversion` runs the tests and the plugin validator. `version` runs
+Use `minor` for backward-compatible features, `patch` for fixes, and `major`
+for breaking changes. `package.json` is the only version source before that
+command. `preversion` runs the tests and the plugin validator. `version` runs
 `scripts/sync-version.mjs`, which copies the version into
 `.claude-plugin/plugin.json` and turns the `## Unreleased` section of
 `CHANGELOG.md` into the release section. npm then commits and tags `v<version>`.
@@ -244,8 +314,9 @@ Claude uses the plugin name as the command namespace. The plugin name is
 
 | Command | Alias | Purpose |
 |---|---:|---|
-| `brief` | — | Build compact task context for an objective |
+| `brief` | — | Build ranked, bounded task context for an objective |
 | `check` | `c` | Run a Bearing check |
+| `contribute` | — | Prepare an upstream Mauro suggestion or pull request |
 | `docs` | `d` | Inspect documentation state |
 | `help` | `h` | Show command help |
 | `impact` | `i` | Predict affected repository areas |
@@ -259,8 +330,8 @@ Claude uses the plugin name as the command namespace. The plugin name is
 | `where` | `w` | Find code and docs for a concept |
 
 Infrequent or agent-facing commands do not consume one-letter aliases:
-`brief`, `charter`, `doctor`, `init`, `navigator`, `reconcile`, `refit`,
-`tool`, `who`, and `why`.
+`brief`, `charter`, `contribute`, `doctor`, `init`, `navigator`, `reconcile`,
+`refit`, `tool`, `who`, and `why`.
 
 ## Toolbox
 
@@ -386,6 +457,14 @@ implementation and review the changed files and any supplied diff afterwards.
 The host coding-agent session implements the change and runs the required checks.
 Canonical context remains in the Map, Charter, and Navigator briefs rather
 than in one session's conversation.
+
+`brief` selects at most three responsible capabilities and two explicit
+reviewers. It narrows likely paths to the best lexical path matches, keeps all
+applicable Instruction Contracts, and caps supporting documents and proposed
+verification at eight each. It removes redundant npm checks when the current
+package manifest proves that another selected script runs them. These are
+orientation hints, not proof of semantic scope; the selected Navigator must
+still verify the boundary against code.
 
 Codex and other compatible hosts discover the generated `.agents/skills/`
 views. Claude Code loads project-agent files at session start. Restart a

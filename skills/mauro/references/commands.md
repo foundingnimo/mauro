@@ -24,6 +24,7 @@ Use exact command names and aliases. Do not resolve partial names.
 |---|---|
 | `brief` | Build bounded task context without creating a Voyage. |
 | `charter` | Create, show, update, diff, or validate human intent. |
+| `contribute` | Prepare a private upstream Mauro suggestion or code pull request. |
 | `doctor` | Validate installation, hooks, schemas, and scanners. |
 | `init` | Ask for and pin the canonical branch, then run the first Expedition. |
 | `navigator` | List, show, regenerate, or request specialist review. |
@@ -98,6 +99,17 @@ Mutation commands create proposals. Promote them only after context review.
 ```
 
 Queries are read-only.
+
+`impact` and `brief` rank normalized exact lexical evidence instead of loose
+substring matches. A Brief returns at most three responsible capabilities and
+two explicit reviewers. It narrows likely paths to the strongest matches,
+keeps every applicable Instruction Contract, and caps supporting documents and
+proposed verification commands at eight each. The selected Navigator still
+verifies semantic scope against code. Mauro removes an npm script command when
+the current package manifest proves that another selected command for that
+package runs it. The host applies the same rule to additional checks that it
+discovers. Every Brief also carries the mandatory pre-response gate from the
+ambient workflow.
 
 ## Toolbox
 
@@ -178,6 +190,24 @@ verification commit. It refuses without an evidence file under
 but the Bearing is blocked or needs review. Do not collapse these states into
 one success or failure label.
 
+## Contribute to Mauro
+
+```text
+/mauro contribute "<idea>"
+/mauro contribute list [--status candidate|dismissed|submitted]
+/mauro contribute show <MI-0001>
+/mauro contribute preview <MI-0001> --as <suggestion|pr>
+/mauro contribute dismiss <MI-0001> --reason "<reason>"
+/mauro contribute doctor [--clear-stale-lock]
+```
+
+Use the [Contribution](contribute.md) workflow. It can record a generalized
+Mauro limitation, prepare an exact GitHub suggestion, or prepare a code pull
+request. Detection and preview are local. Any issue, branch, commit, push, or
+pull-request creation requires explicit authorization.
+`contribute doctor` reports the private candidate-log lock and clears it only
+after Mauro proves that its local owner process is gone.
+
 ## Other
 
 ```text
@@ -188,7 +218,7 @@ mauro init --canonical-ref <selected-branch>
 /mauro status
 /mauro check
 /mauro brief "<objective>"
-/mauro reconcile [--force]
+/mauro reconcile [--force] [--dry-run]
 /mauro refit propose
 /mauro doctor
 /mauro run "<objective>"
@@ -199,6 +229,10 @@ mauro init --canonical-ref <selected-branch>
 /mauro run abandon V-0001 --reason "<reason>"
 /mauro doctor --clear-stale-lock
 ```
+
+`reconcile --dry-run` reports pending reconciliation paths and triggers
+without changing repository state. Use it when the user explicitly forbids
+all repository writes.
 
 Starting a Voyage creates a durable `planning` record under `.mauro/voyages/`.
 It owns no paths until the user approves the plan and Mauro runs `activate`.
