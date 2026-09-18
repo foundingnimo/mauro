@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0 (2026-09-18)
+
 - Raise the minimum runtime to Node.js 22, the oldest supported LTS line, and
   fail early with a clear message when the CLI or standalone installer runs on
   an older version.
